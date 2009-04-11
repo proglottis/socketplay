@@ -8,11 +8,13 @@
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
 import logging
+import optparse
+import select
+import socket
+import struct
+
 import pygame
 from pygame.locals import *
-import socket
-import select
-import struct
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -362,7 +364,7 @@ def create_client(quit_flag, address, port=11235):
     client = Client(sock_server, sendto, players)
     return client
 
-if __name__ == "__main__":
+def main(server=True, address="localhost", port=11235):
     quit_flag = ClientQuit()
     logging.info("Socket Play")
     logging.debug("Start pygame")
@@ -371,10 +373,11 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode((800, 600))
     logging.debug("Create timer")
     clock = pygame.time.Clock()
-    logging.debug("Start server")
-    server = create_server("localhost")
+    if server:
+        logging.debug("Start server")
+        server = create_server("0.0.0.0", port)
     logging.debug("Start client")
-    client = create_client(quit_flag, "localhost")
+    client = create_client(quit_flag, address, port)
     client.send_hello()
     logging.debug("Start game loop")
     while not quit_flag.is_quit():
@@ -389,7 +392,8 @@ if __name__ == "__main__":
             elif event.type == KEYUP:
                 logging.debug("Keyup %s" % pygame.key.name(event.key))
         # Update
-        server.update()
+        if server:
+            server.update()
         client.update()
         # Graphics
         screen.fill((0,0,0))
@@ -398,3 +402,13 @@ if __name__ == "__main__":
         # Timing
         clock.tick(60)
     logging.info("Quit")
+
+if __name__ == "__main__":
+    parser = optparse.OptionParser()
+    parser.add_option("-c", "--connect", type="string", dest="address", default="localhost")
+    parser.add_option("-p", "--port", type="int", dest="port", default=11235)
+    (options, args) = parser.parse_args()
+    server = True
+    if options.address != "localhost":
+        server = False
+    main(server=server, address=options.address, port=options.port)
