@@ -44,9 +44,9 @@ def cmd_hello():
 def cmd_quit():
     return cmd_header(cmd_command(CMD_QUIT, ""))
 
-def cmd_spawn(type, color):
+def cmd_spawn(type, id, color):
     return cmd_header(
-            cmd_command(CMD_SPAWN, struct.pack("!BBBB", type, *color)))
+            cmd_command(CMD_SPAWN, struct.pack("!BBBBB", type, id, *color)))
 
 class HeaderDispatch(object):
     def __init__(self, dispatcher):
@@ -93,36 +93,66 @@ class SocketServer(object):
         for sock in sock_write:
             self.queue.write(sock)
 
+class IdentFetchError(Exception):
+    pass
+
+class IdentAlloc(object):
+    def __init__(self, idrange):
+        self.__used = []
+        self.__free = [x for x in range(idrange)]
+
+    def free(self, oldid):
+        try:
+            used_index = self.__used.index(oldid)
+            self.__free.append(oldid)
+            del self.__used[used_index]
+        except ValueError:
+            pass
+
+    def fetch(self):
+        if len(self.__free) < 1:
+            raise IdentFetchError("no more ID's in range")
+        newid = self.__free.pop(0)
+        self.__used.append(newid)
+        return newid
+
 class ServerBoxman(object):
-    def __init__(self, color=(255,255,255)):
-        self.rect = pygame.Rect(0,0,20,20)
+    def __init__(self, id, color=(255,255,255)):
+        self.id = id
         self.color = color
+        self.rect = pygame.Rect(0,0,20,20)
 
     def update(self, **dict):
         self.rect.x += 1
         self.rect.y += 1
 
 class ServerHelloDispatch(object):
-    def __init__(self, cmdqueue, players):
+    def __init__(self, cmdqueue, players, idalloc):
         self.cmdqueue = cmdqueue
         self.players = players
+        self.idalloc = idalloc
 
     def dispatch(self, data, address):
         if address not in self.players:
-            boxman = ServerBoxman()
+            newid = self.idalloc.fetch()
+            boxman = ServerBoxman(newid)
             self.players[address] = boxman
-            self.cmdqueue.push(cmd_spawn(ENT_PLAYER, boxman.color), address)
+            self.cmdqueue.push(
+                    cmd_spawn(ENT_PLAYER, newid, boxman.color),
+                    address)
             logging.debug("Server:Hello:New client:%s", repr(address))
         else:
             logging.debug("Server:Hello:Client already known")
 
 class ServerQuitDispatch(object):
-    def __init__(self, cmdqueue, players):
+    def __init__(self, cmdqueue, players, idalloc):
         self.cmdqueue = cmdqueue
         self.players = players
+        self.idalloc = idalloc
 
     def dispatch(self, data, address):
         if address in self.players:
+            self.idalloc.free(self.players[address].id)
             del self.players[address]
             self.cmdqueue.push(cmd_quit(), address)
             logging.debug("Server:Quit:Client quit:%s", repr(address))
@@ -154,9 +184,10 @@ class Server(object):
 
 def create_server(address, port=11235):
     players = {}
+    idalloc = IdentAlloc(256)
     sock_writequeue = SocketWriteQueue()
-    hello = ServerHelloDispatch(sock_writequeue, players)
-    quit = ServerQuitDispatch(sock_writequeue, players)
+    hello = ServerHelloDispatch(sock_writequeue, players, idalloc)
+    quit = ServerQuitDispatch(sock_writequeue, players, idalloc)
     cmd = ServerCommandDispatch(hello, quit)
     header = HeaderDispatch(cmd)
     sock_dispatcher = SocketReadDispatch(header)
@@ -189,7 +220,7 @@ class ClientSpawnDispatch(object):
         self.group = group
 
     def dispatch(self, data, address):
-        type, color_r, color_g, color_b = struct.unpack("!BBBB", data[:4])
+        type, id, color_r, color_g, color_b = struct.unpack("!BBBBB", data[:5])
         color = (color_r, color_g, color_b)
         if type == ENT_PLAYER:
             logging.debug("Client:Spawn:ENT_PLAYER")
