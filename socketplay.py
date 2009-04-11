@@ -405,10 +405,10 @@ def main(server=True, address="localhost", port=11235):
 
 if __name__ == "__main__":
     parser = optparse.OptionParser()
-    parser.add_option("-c", "--connect", type="string", dest="address", default="localhost")
+    parser.set_defaults(server=True)
+    parser.add_option("-s", "--server", action="store_true", dest="server")
+    parser.add_option("-c", "--client", action="store_false", dest="server")
+    parser.add_option("-a", "--address", type="string", dest="address", default="localhost")
     parser.add_option("-p", "--port", type="int", dest="port", default=11235)
     (options, args) = parser.parse_args()
-    server = True
-    if options.address != "localhost":
-        server = False
-    main(server=server, address=options.address, port=options.port)
+    main(server=options.server, address=options.address, port=options.port)
