@@ -23,8 +23,8 @@ logging.basicConfig(level=logging.DEBUG)
 ) = range(3)
 
 (
+    ENT_PLAYER,
     ENT_BOXMAN,
-    ENT_BOXMAN_CONTROLLED,
 ) = range(2)
 
 def cmd_pack_header(len):
@@ -88,6 +88,20 @@ class SocketSendQueue(object):
                 sock.sendto(cmd.data, cmd.sendto)
             self.sendqueue = []
 
+class SocketServer(object):
+    def __init__(self, sock_dispatcher, sock_sendqueue, sock):
+        self.dispatcher = sock_dispatcher
+        self.sendqueue = sock_sendqueue
+        self.sock = sock
+
+    def update(self):
+        sock_read, sock_write, sock_error = select.select((self.sock,),
+                                                          (self.sock,),
+                                                          (),
+                                                          0)
+        self.dispatcher.dispatch(sock_read)
+        self.sendqueue.send(sock_write)
+
 class ServerBoxman(object):
     def __init__(self, color=(255,255,255)):
         self.rect = pygame.Rect(0,0,20,20)
@@ -107,7 +121,7 @@ class ServerHelloDispatch(object):
             boxman = ServerBoxman()
             self.players[address] = boxman
             self.cmdqueue.push_command(SpawnCommand(address,
-                    ENT_BOXMAN_CONTROLLED,
+                    ENT_PLAYER,
                     boxman.color))
             logging.debug("Server:Hello:New client:%s", repr(address))
         else:
@@ -143,19 +157,11 @@ class ServerCommandDispatch(object):
             logging.warning("Server:Command:Bad command")
 
 class Server(object):
-    def __init__(self, sock_dispatcher, sock_sendqueue, sock):
-        self.quit = False
-        self.sock_dispatcher = sock_dispatcher
-        self.sock_sendqueue = sock_sendqueue
-        self.sock = sock
+    def __init__(self, sock_server):
+        self.sock_server = sock_server
 
     def update(self):
-        sock_read, sock_write, sock_error = select.select((self.sock,),
-                                                          (self.sock,),
-                                                          (),
-                                                          0)
-        self.sock_dispatcher.dispatch(sock_read)
-        self.sock_sendqueue.send(sock_write)
+        self.sock_server.update()
 
 def create_server(address, port=11235):
     players = {}
@@ -168,7 +174,8 @@ def create_server(address, port=11235):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(0)
     sock.bind((address, port))
-    server = Server(sock_dispatcher, sock_sendqueue, sock)
+    sock_server = SocketServer(sock_dispatcher, sock_sendqueue, sock)
+    server = Server(sock_server)
     return server
 
 class ClientBoxman(pygame.sprite.Sprite):
@@ -195,11 +202,11 @@ class ClientSpawnDispatch(object):
     def dispatch(self, data, address):
         type, color_r, color_g, color_b = struct.unpack("!BBBB", data[:4])
         color = (color_r, color_g, color_b)
-        if type == ENT_BOXMAN:
-            logging.debug("Client:Spawn:ENT_BOXMAN")
+        if type == ENT_PLAYER:
+            logging.debug("Client:Spawn:ENT_PLAYER")
             self.group.add(ClientBoxman(color))
-        elif type == ENT_BOXMAN_CONTROLLED:
-            logging.debug("Client:Spawn:ENT_BOXMAN_CONTROLLED")
+        elif type == ENT_BOXMAN:
+            logging.debug("Client:Spawn:ENT_BOXMAN")
             self.group.add(ClientBoxman(color))
         else:
             logging.warning("Client:Spawn:Unknown type")
@@ -231,22 +238,21 @@ class ClientQuit(object):
         return self.quit
 
 class Client(object):
-    def __init__(self, sock_dispatcher, sock_sendqueue, sock, sendto, group):
-        self.dispatcher = sock_dispatcher
-        self.sendqueue = sock_sendqueue
-        self.sock = sock
+    def __init__(self, sock_server, sendto, group):
+        self.sock_server = sock_server
         self.sendto = sendto
         self.group = group
         # Trigger startup
-        self.sendqueue.push_command(HelloCommand(self.sendto))
+        self.send_hello()
+
+    def send_hello(self):
+        self.sock_server.sendqueue.push_command(HelloCommand(self.sendto))
+
+    def send_quit(self):
+        self.sock_server.sendqueue.push_command(QuitCommand(self.sendto))
 
     def update(self):
-        sock_read, sock_write, sock_error = select.select((self.sock,),
-                                                          (self.sock,),
-                                                          (),
-                                                          0)
-        self.dispatcher.dispatch(sock_read)
-        self.sendqueue.send(sock_write)
+        self.sock_server.update()
 
     def render(self, surface):
         self.group.draw(surface)
@@ -262,7 +268,8 @@ def create_client(quit_flag, address, port=11235):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(0)
     sendto = (address, port)
-    client = Client(sock_dispatcher, sock_sendqueue, sock, sendto, group)
+    sock_server = SocketServer(sock_dispatcher, sock_sendqueue, sock)
+    client = Client(sock_server, sendto, group)
     return client
 
 if __name__ == "__main__":
@@ -283,11 +290,11 @@ if __name__ == "__main__":
         # Events
         for event in pygame.event.get():
             if event.type == QUIT:
-                client.sendqueue.push_command(QuitCommand(client.sendto))
+                client.send_quit()
             elif event.type == KEYDOWN:
                 logging.debug("Keydown %s" % pygame.key.name(event.key))
                 if event.key == K_ESCAPE:
-                    client.sendqueue.push_command(QuitCommand(client.sendto))
+                    client.send_quit()
             elif event.type == KEYUP:
                 logging.debug("Keyup %s" % pygame.key.name(event.key))
         # Update
