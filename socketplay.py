@@ -66,34 +66,32 @@ class HeaderDispatch(object):
             return
         self.dispatcher.dispatch(data[6:], address)
 
-class SocketDispatch(object):
+class SocketReadDispatch(object):
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
 
-    def dispatch(self, sock_list):
-        for sock in sock_list:
-            data, address = sock.recvfrom(4096)
-            self.dispatcher.dispatch(data, address)
+    def dispatch(self, sock):
+        data, address = sock.recvfrom(4096)
+        self.dispatcher.dispatch(data, address)
 
-class SocketSendQueue(object):
+class SocketWriteQueue(object):
     def __init__(self):
-        self.sendqueue = []
+        self.writequeue = []
 
     def push(self, command):
         if not hasattr(command, "data") or not hasattr(command, "sendto"):
             raise TypeError("Must have a data and sendto attribute")
-        self.sendqueue.append(command)
+        self.writequeue.append(command)
 
-    def send(self, sock_list):
-        for sock in sock_list:
-            for cmd in self.sendqueue:
-                sock.sendto(cmd.data, cmd.sendto)
-            self.sendqueue = []
+    def write(self, sock):
+        for cmd in self.writequeue:
+            sock.sendto(cmd.data, cmd.sendto)
+        self.writequeue = []
 
 class SocketServer(object):
-    def __init__(self, sock_dispatcher, sock_sendqueue, sock):
-        self.dispatcher = sock_dispatcher
-        self.sendqueue = sock_sendqueue
+    def __init__(self, dispatcher, queue, sock):
+        self.dispatcher = dispatcher
+        self.queue = queue
         self.sock = sock
 
     def update(self):
@@ -101,8 +99,10 @@ class SocketServer(object):
                                                           (self.sock,),
                                                           (),
                                                           0)
-        self.dispatcher.dispatch(sock_read)
-        self.sendqueue.send(sock_write)
+        for sock in sock_read:
+            self.dispatcher.dispatch(sock)
+        for sock in sock_write:
+            self.queue.write(sock)
 
 class ServerBoxman(object):
     def __init__(self, color=(255,255,255)):
@@ -167,16 +167,16 @@ class Server(object):
 
 def create_server(address, port=11235):
     players = {}
-    sock_sendqueue = SocketSendQueue()
-    hello = ServerHelloDispatch(sock_sendqueue, players)
-    quit = ServerQuitDispatch(sock_sendqueue, players)
+    sock_writequeue = SocketWriteQueue()
+    hello = ServerHelloDispatch(sock_writequeue, players)
+    quit = ServerQuitDispatch(sock_writequeue, players)
     cmd = ServerCommandDispatch(hello, quit)
     header = HeaderDispatch(cmd)
-    sock_dispatcher = SocketDispatch(header)
+    sock_dispatcher = SocketReadDispatch(header)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(0)
     sock.bind((address, port))
-    sock_server = SocketServer(sock_dispatcher, sock_sendqueue, sock)
+    sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
     server = Server(sock_server)
     return server
 
@@ -246,10 +246,10 @@ class Client(object):
         self.group = group
 
     def send_hello(self):
-        self.sock_server.sendqueue.push(HelloCommand(self.sendto))
+        self.sock_server.queue.push(HelloCommand(self.sendto))
 
     def send_quit(self):
-        self.sock_server.sendqueue.push(QuitCommand(self.sendto))
+        self.sock_server.queue.push(QuitCommand(self.sendto))
 
     def update(self):
         self.sock_server.update()
@@ -263,12 +263,12 @@ def create_client(quit_flag, address, port=11235):
     spawn_dispatcher = ClientSpawnDispatch(group)
     cmd_dispatcher = ClientCommandDispatch(quit_dispatcher, spawn_dispatcher)
     header_dispatcher = HeaderDispatch(cmd_dispatcher)
-    sock_dispatcher = SocketDispatch(header_dispatcher)
-    sock_sendqueue = SocketSendQueue()
+    sock_dispatcher = SocketReadDispatch(header_dispatcher)
+    sock_writequeue = SocketWriteQueue()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(0)
     sendto = (address, port)
-    sock_server = SocketServer(sock_dispatcher, sock_sendqueue, sock)
+    sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
     client = Client(sock_server, sendto, group)
     return client
 
