@@ -20,40 +20,33 @@ logging.basicConfig(level=logging.DEBUG)
     CMD_HELLO,
     CMD_QUIT,
     CMD_SPAWN,
-) = range(3)
+    CMD_DESTROY,
+    CMD_UPDATE,
+) = range(5)
 
 (
     ENT_PLAYER,
     ENT_BOXMAN,
 ) = range(2)
 
-def cmd_pack_header(len):
-    return struct.pack("!6s", "BOXMAN")
-
-def cmd_pack_command(cmd):
-    return struct.pack("!B", cmd)
-
 def cmd_unpack_command(data, offset=0):
     return struct.unpack("!B", data[offset:offset+1])
 
-def cmd_pack(cmd, data):
-    part = cmd_pack_command(cmd) + data
-    return cmd_pack_header(len(part)) + part
+def cmd_header(data):
+    return struct.pack("!6s", "BOXMAN") + data
 
-class HelloCommand(object):
-    def __init__(self, sendto):
-        self.data = cmd_pack(CMD_HELLO, "")
-        self.sendto = sendto
+def cmd_command(cmd, data):
+    return struct.pack("!B", cmd) + data
 
-class QuitCommand(object):
-    def __init__(self, sendto):
-        self.data = cmd_pack(CMD_QUIT, "")
-        self.sendto = sendto
+def cmd_hello():
+    return cmd_header(cmd_command(CMD_HELLO, ""))
 
-class SpawnCommand(object):
-    def __init__(self, sendto, type, color):
-        self.data = cmd_pack(CMD_SPAWN, struct.pack("!BBBB", type, *color))
-        self.sendto = sendto
+def cmd_quit():
+    return cmd_header(cmd_command(CMD_QUIT, ""))
+
+def cmd_spawn(type, color):
+    return cmd_header(
+            cmd_command(CMD_SPAWN, struct.pack("!BBBB", type, *color)))
 
 class HeaderDispatch(object):
     def __init__(self, dispatcher):
@@ -78,27 +71,23 @@ class SocketWriteQueue(object):
     def __init__(self):
         self.writequeue = []
 
-    def push(self, command):
-        if not hasattr(command, "data") or not hasattr(command, "sendto"):
-            raise TypeError("Must have a data and sendto attribute")
-        self.writequeue.append(command)
+    def push(self, data, address):
+        self.writequeue.append((data, address))
 
     def write(self, sock):
         for cmd in self.writequeue:
-            sock.sendto(cmd.data, cmd.sendto)
+            sock.sendto(cmd[0], cmd[1])
         self.writequeue = []
 
 class SocketServer(object):
     def __init__(self, dispatcher, queue, sock):
         self.dispatcher = dispatcher
         self.queue = queue
-        self.sock = sock
+        self.socks = (sock,)
 
     def update(self):
-        sock_read, sock_write, sock_error = select.select((self.sock,),
-                                                          (self.sock,),
-                                                          (),
-                                                          0)
+        result = select.select(self.socks, self.socks, (), 0)
+        sock_read, sock_write, sock_error = result
         for sock in sock_read:
             self.dispatcher.dispatch(sock)
         for sock in sock_write:
@@ -122,9 +111,7 @@ class ServerHelloDispatch(object):
         if address not in self.players:
             boxman = ServerBoxman()
             self.players[address] = boxman
-            self.cmdqueue.push(SpawnCommand(address,
-                    ENT_PLAYER,
-                    boxman.color))
+            self.cmdqueue.push(cmd_spawn(ENT_PLAYER, boxman.color), address)
             logging.debug("Server:Hello:New client:%s", repr(address))
         else:
             logging.debug("Server:Hello:Client already known")
@@ -137,7 +124,7 @@ class ServerQuitDispatch(object):
     def dispatch(self, data, address):
         if address in self.players:
             del self.players[address]
-            self.cmdqueue.push(QuitCommand(address))
+            self.cmdqueue.push(cmd_quit(), address)
             logging.debug("Server:Quit:Client quit:%s", repr(address))
         else:
             logging.debug("Server:Quit:Client not known")
@@ -246,10 +233,10 @@ class Client(object):
         self.group = group
 
     def send_hello(self):
-        self.sock_server.queue.push(HelloCommand(self.sendto))
+        self.sock_server.queue.push(cmd_hello(), self.sendto)
 
     def send_quit(self):
-        self.sock_server.queue.push(QuitCommand(self.sendto))
+        self.sock_server.queue.push(cmd_quit(), self.sendto)
 
     def update(self):
         self.sock_server.update()
