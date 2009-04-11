@@ -51,6 +51,10 @@ def cmd_spawn(type, id, color):
 def cmd_destroy(id):
     return cmd_header(cmd_command(CMD_DESTROY, struct.pack("!B", id)))
 
+def cmd_update(id, position):
+    return cmd_header(
+            cmd_command(CMD_UPDATE, struct.pack("!Bll", id, *position)))
+
 class HeaderDispatch(object):
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
@@ -197,8 +201,13 @@ class Server(object):
         self.players = players
 
     def update(self):
-        for address, player in self.players.iteritems():
+        for player in self.players.itervalues():
             player.update()
+        for address in self.players.iterkeys():
+            for player in self.players.itervalues():
+                self.sock_server.queue.push(
+                    cmd_update(player.id, player.rect.topleft),
+                    address)
         self.sock_server.update()
 
 def create_server(address, port=11235):
@@ -263,11 +272,28 @@ class ClientDestroyDispatch(object):
         else:
             logging.warning("Client:Destroy:Unknown entity")
 
+class ClientUpdateDispatch(object):
+    def __init__(self, players):
+        self.players = players
+
+    def dispatch(self, data, address):
+        id, posx, posy = struct.unpack("!Bll", data[:9])
+        pos = (posx, posy)
+        if id in self.players:
+            self.players[id].rect.topleft = pos
+        else:
+            logging.warning("Client:Update:Unknown entity")
+
 class ClientCommandDispatch(object):
-    def __init__(self, quit_dispatcher, spawn_dispatcher, destroy_dispatcher):
+    def __init__(self,
+                 quit_dispatcher,
+                 spawn_dispatcher,
+                 destroy_dispatcher,
+                 update_dispatcher):
         self.quit_dispatcher = quit_dispatcher
         self.spawn_dispatcher = spawn_dispatcher
         self.destroy_dispatcher = destroy_dispatcher
+        self.update_dispatcher = update_dispatcher
 
     def dispatch(self, data, address):
         cmd, = struct.unpack("!B", data[:1])
@@ -280,6 +306,8 @@ class ClientCommandDispatch(object):
         elif cmd == CMD_DESTROY:
             logging.debug("Client:Command:CMD_DESTROY")
             self.destroy_dispatcher.dispatch(data[1:], address)
+        elif cmd == CMD_UPDATE:
+            self.update_dispatcher.dispatch(data[1:], address)
         else:
             logging.warning("Client:Command:Bad command")
 
@@ -319,9 +347,11 @@ def create_client(quit_flag, address, port=11235):
     quit_dispatcher = ClientQuitDispatch(quit_flag)
     spawn_dispatcher = ClientSpawnDispatch(players)
     destroy_dispatcher = ClientDestroyDispatch(players)
+    update_dispatcher = ClientUpdateDispatch(players)
     cmd_dispatcher = ClientCommandDispatch(quit_dispatcher,
                                            spawn_dispatcher,
-                                           destroy_dispatcher)
+                                           destroy_dispatcher,
+                                           update_dispatcher)
     header_dispatcher = HeaderDispatch(cmd_dispatcher)
     sock_dispatcher = SocketReadDispatch(header_dispatcher)
     sock_writequeue = SocketWriteQueue()
