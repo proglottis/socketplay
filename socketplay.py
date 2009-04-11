@@ -406,9 +406,15 @@ def main(server=True, address="localhost", port=11235):
 if __name__ == "__main__":
     parser = optparse.OptionParser()
     parser.set_defaults(server=True)
-    parser.add_option("-s", "--server", action="store_true", dest="server")
-    parser.add_option("-c", "--client", action="store_false", dest="server")
-    parser.add_option("-a", "--address", type="string", dest="address", default="localhost")
-    parser.add_option("-p", "--port", type="int", dest="port", default=11235)
+    parser.add_option("-s", "--server", action="store_true", dest="server",
+                      help="run server and client connecting to ADDRESS "
+                           "via PORT")
+    parser.add_option("-c", "--client", action="store_false", dest="server",
+                      help="run client connecting to ADDRESS via PORT")
+    parser.add_option("-a", "--address", type="string", dest="address",
+                      default="localhost", help="set IP address to listen "
+                              "or connect to")
+    parser.add_option("-p", "--port", type="int", dest="port", default=11235,
+                      help="set port to listen or connect to")
     (options, args) = parser.parse_args()
     main(server=options.server, address=options.address, port=options.port)
