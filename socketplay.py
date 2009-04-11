@@ -48,6 +48,9 @@ def cmd_spawn(type, id, color):
     return cmd_header(
             cmd_command(CMD_SPAWN, struct.pack("!BBBBB", type, id, *color)))
 
+def cmd_destroy(id):
+    return cmd_header(cmd_command(CMD_DESTROY, struct.pack("!B", id)))
+
 class HeaderDispatch(object):
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
@@ -136,7 +139,17 @@ class ServerHelloDispatch(object):
         if address not in self.players:
             newid = self.idalloc.fetch()
             boxman = ServerBoxman(newid)
+            for sendto, player in self.players.iteritems():
+                # Notify new player of existing players
+                self.cmdqueue.push(
+                        cmd_spawn(ENT_BOXMAN, player.id, player.color),
+                        address)
+                # Notify existing players of new player
+                self.cmdqueue.push(
+                        cmd_spawn(ENT_BOXMAN, boxman.id, boxman.color),
+                        sendto)
             self.players[address] = boxman
+            # Notify new player of its entity
             self.cmdqueue.push(
                     cmd_spawn(ENT_PLAYER, newid, boxman.color),
                     address)
@@ -152,10 +165,13 @@ class ServerQuitDispatch(object):
 
     def dispatch(self, data, address):
         if address in self.players:
-            self.idalloc.free(self.players[address].id)
+            oldid = self.players[address].id
+            self.idalloc.free(oldid)
             del self.players[address]
             self.cmdqueue.push(cmd_quit(), address)
             logging.debug("Server:Quit:Client quit:%s", repr(address))
+            for address in self.players.iterkeys():
+                self.cmdqueue.push(cmd_destroy(oldid), address)
         else:
             logging.debug("Server:Quit:Client not known")
 
@@ -176,10 +192,13 @@ class ServerCommandDispatch(object):
             logging.warning("Server:Command:Bad command")
 
 class Server(object):
-    def __init__(self, sock_server):
+    def __init__(self, sock_server, players):
         self.sock_server = sock_server
+        self.players = players
 
     def update(self):
+        for address, player in self.players.iteritems():
+            player.update()
         self.sock_server.update()
 
 def create_server(address, port=11235):
@@ -195,7 +214,7 @@ def create_server(address, port=11235):
     sock.setblocking(0)
     sock.bind((address, port))
     sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
-    server = Server(sock_server)
+    server = Server(sock_server, players)
     return server
 
 class ClientBoxman(pygame.sprite.Sprite):
@@ -216,25 +235,39 @@ class ClientQuitDispatch(object):
         self.quit_flag.set_quit()
 
 class ClientSpawnDispatch(object):
-    def __init__(self, group):
-        self.group = group
+    def __init__(self, players):
+        self.players = players
 
     def dispatch(self, data, address):
         type, id, color_r, color_g, color_b = struct.unpack("!BBBBB", data[:5])
         color = (color_r, color_g, color_b)
+        logging.debug("Client:Spawn:Spawn entity %d" % id)
         if type == ENT_PLAYER:
             logging.debug("Client:Spawn:ENT_PLAYER")
-            self.group.add(ClientBoxman(color))
+            self.players[id] = ClientBoxman(color)
         elif type == ENT_BOXMAN:
             logging.debug("Client:Spawn:ENT_BOXMAN")
-            self.group.add(ClientBoxman(color))
+            self.players[id] = ClientBoxman(color)
         else:
             logging.warning("Client:Spawn:Unknown type")
 
+class ClientDestroyDispatch(object):
+    def __init__(self, players):
+        self.players = players
+
+    def dispatch(self, data, address):
+        id, = struct.unpack("!B", data[:1])
+        if id in self.players:
+            logging.debug("Client:Destroy:Destroy entity %d" % id)
+            del self.players[id]
+        else:
+            logging.warning("Client:Destroy:Unknown entity")
+
 class ClientCommandDispatch(object):
-    def __init__(self, quit_dispatcher, spawn_dispatcher):
+    def __init__(self, quit_dispatcher, spawn_dispatcher, destroy_dispatcher):
         self.quit_dispatcher = quit_dispatcher
         self.spawn_dispatcher = spawn_dispatcher
+        self.destroy_dispatcher = destroy_dispatcher
 
     def dispatch(self, data, address):
         cmd, = struct.unpack("!B", data[:1])
@@ -244,6 +277,9 @@ class ClientCommandDispatch(object):
         elif cmd == CMD_SPAWN:
             logging.debug("Client:Command:CMD_SPAWN")
             self.spawn_dispatcher.dispatch(data[1:], address)
+        elif cmd == CMD_DESTROY:
+            logging.debug("Client:Command:CMD_DESTROY")
+            self.destroy_dispatcher.dispatch(data[1:], address)
         else:
             logging.warning("Client:Command:Bad command")
 
@@ -258,10 +294,10 @@ class ClientQuit(object):
         return self.quit
 
 class Client(object):
-    def __init__(self, sock_server, sendto, group):
+    def __init__(self, sock_server, sendto, players):
         self.sock_server = sock_server
         self.sendto = sendto
-        self.group = group
+        self.players = players
 
     def send_hello(self):
         self.sock_server.queue.push(cmd_hello(), self.sendto)
@@ -271,15 +307,21 @@ class Client(object):
 
     def update(self):
         self.sock_server.update()
+        for player in self.players.itervalues():
+            player.update()
 
     def render(self, surface):
-        self.group.draw(surface)
+        for player in self.players.itervalues():
+            surface.blit(player.image, player.rect)
 
 def create_client(quit_flag, address, port=11235):
-    group = pygame.sprite.Group()
+    players = {}
     quit_dispatcher = ClientQuitDispatch(quit_flag)
-    spawn_dispatcher = ClientSpawnDispatch(group)
-    cmd_dispatcher = ClientCommandDispatch(quit_dispatcher, spawn_dispatcher)
+    spawn_dispatcher = ClientSpawnDispatch(players)
+    destroy_dispatcher = ClientDestroyDispatch(players)
+    cmd_dispatcher = ClientCommandDispatch(quit_dispatcher,
+                                           spawn_dispatcher,
+                                           destroy_dispatcher)
     header_dispatcher = HeaderDispatch(cmd_dispatcher)
     sock_dispatcher = SocketReadDispatch(header_dispatcher)
     sock_writequeue = SocketWriteQueue()
@@ -287,7 +329,7 @@ def create_client(quit_flag, address, port=11235):
     sock.setblocking(0)
     sendto = (address, port)
     sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
-    client = Client(sock_server, sendto, group)
+    client = Client(sock_server, sendto, players)
     return client
 
 if __name__ == "__main__":
