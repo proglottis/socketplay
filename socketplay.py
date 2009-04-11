@@ -242,8 +242,6 @@ class Client(object):
         self.sock_server = sock_server
         self.sendto = sendto
         self.group = group
-        # Trigger startup
-        self.send_hello()
 
     def send_hello(self):
         self.sock_server.sendqueue.push_command(HelloCommand(self.sendto))
@@ -285,6 +283,7 @@ if __name__ == "__main__":
     server = create_server("localhost")
     logging.debug("Start client")
     client = create_client(quit_flag, "localhost")
+    client.send_hello()
     logging.debug("Start game loop")
     while not quit_flag.is_quit():
         # Events
