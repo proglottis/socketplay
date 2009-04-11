@@ -79,7 +79,9 @@ class SocketSendQueue(object):
     def __init__(self):
         self.sendqueue = []
 
-    def push_command(self, command):
+    def push(self, command):
+        if not hasattr(command, "data") or not hasattr(command, "sendto"):
+            raise TypeError("Must have a data and sendto attribute")
         self.sendqueue.append(command)
 
     def send(self, sock_list):
@@ -120,7 +122,7 @@ class ServerHelloDispatch(object):
         if address not in self.players:
             boxman = ServerBoxman()
             self.players[address] = boxman
-            self.cmdqueue.push_command(SpawnCommand(address,
+            self.cmdqueue.push(SpawnCommand(address,
                     ENT_PLAYER,
                     boxman.color))
             logging.debug("Server:Hello:New client:%s", repr(address))
@@ -135,7 +137,7 @@ class ServerQuitDispatch(object):
     def dispatch(self, data, address):
         if address in self.players:
             del self.players[address]
-            self.cmdqueue.push_command(QuitCommand(address))
+            self.cmdqueue.push(QuitCommand(address))
             logging.debug("Server:Quit:Client quit:%s", repr(address))
         else:
             logging.debug("Server:Quit:Client not known")
@@ -244,10 +246,10 @@ class Client(object):
         self.group = group
 
     def send_hello(self):
-        self.sock_server.sendqueue.push_command(HelloCommand(self.sendto))
+        self.sock_server.sendqueue.push(HelloCommand(self.sendto))
 
     def send_quit(self):
-        self.sock_server.sendqueue.push_command(QuitCommand(self.sendto))
+        self.sock_server.sendqueue.push(QuitCommand(self.sendto))
 
     def update(self):
         self.sock_server.update()
