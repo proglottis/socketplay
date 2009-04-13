@@ -1,4 +1,7 @@
-# SocketPlay - Simple client/server python game.
+"""SocketPlay
+
+Simple client/server python game.
+"""
 # Copyright (C) 2008 James Fargher
 
 # This program is free software. It comes without any warranty, to
@@ -14,7 +17,7 @@ import socket
 import struct
 
 import pygame
-from pygame.locals import *
+from pygame.locals import QUIT, KEYDOWN, KEYUP, K_ESCAPE
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -32,32 +35,43 @@ logging.basicConfig(level=logging.DEBUG)
 ) = range(2)
 
 def cmd_unpack_command(data, offset=0):
+    """Unpack command type from data"""
     return struct.unpack("!B", data[offset:offset+1])
 
 def cmd_header(data):
+    """Wrap data with header"""
     return struct.pack("!6s", "BOXMAN") + data
 
 def cmd_command(cmd, data):
+    """Wrap data with command"""
     return struct.pack("!B", cmd) + data
 
 def cmd_hello():
+    """Complete client introduction packet"""
     return cmd_header(cmd_command(CMD_HELLO, ""))
 
 def cmd_quit():
+    """Complete client quit packet"""
     return cmd_header(cmd_command(CMD_QUIT, ""))
 
-def cmd_spawn(type, id, color):
+def cmd_spawn(entitytype, entityid, color):
+    """Complete spawn entity packet"""
     return cmd_header(
-            cmd_command(CMD_SPAWN, struct.pack("!BBBBB", type, id, *color)))
+            cmd_command(
+                    CMD_SPAWN,
+                    struct.pack("!BBBBB", entitytype, entityid, *color)))
 
-def cmd_destroy(id):
-    return cmd_header(cmd_command(CMD_DESTROY, struct.pack("!B", id)))
+def cmd_destroy(entityid):
+    """Complete destroy entity packet"""
+    return cmd_header(cmd_command(CMD_DESTROY, struct.pack("!B", entityid)))
 
-def cmd_update(id, position):
+def cmd_update(entityid, position):
+    """Complete update entity packet"""
     return cmd_header(
-            cmd_command(CMD_UPDATE, struct.pack("!Bll", id, *position)))
+            cmd_command(CMD_UPDATE, struct.pack("!Bll", entityid, *position)))
 
 class HeaderDispatch(object):
+    """Dispatch packet unwrapping header"""
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
 
@@ -69,6 +83,7 @@ class HeaderDispatch(object):
         self.dispatcher.dispatch(data[6:], address)
 
 class SocketReadDispatch(object):
+    """Dispatch packet read from socket"""
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
 
@@ -77,6 +92,7 @@ class SocketReadDispatch(object):
         self.dispatcher.dispatch(data, address)
 
 class SocketWriteQueue(object):
+    """Queue packets to be written to a socket"""
     def __init__(self):
         self.writequeue = []
 
@@ -89,6 +105,7 @@ class SocketWriteQueue(object):
         self.writequeue = []
 
 class SocketServer(object):
+    """Handle socket and dispatch packets"""
     def __init__(self, dispatcher, queue, sock):
         self.dispatcher = dispatcher
         self.queue = queue
@@ -103,9 +120,11 @@ class SocketServer(object):
             self.queue.write(sock)
 
 class IdentFetchError(Exception):
+    """Error raised when no unique identities are available"""
     pass
 
 class IdentAlloc(object):
+    """Manage unique identity numbers in range"""
     def __init__(self, idrange):
         self.__used = []
         self.__free = [x for x in range(idrange)]
@@ -126,16 +145,18 @@ class IdentAlloc(object):
         return newid
 
 class ServerBoxman(object):
-    def __init__(self, id, color=(255,255,255)):
+    """Server Boxman entity"""
+    def __init__(self, id, color=(255, 255, 255)):
         self.id = id
         self.color = color
-        self.rect = pygame.Rect(0,0,20,20)
+        self.rect = pygame.Rect(0, 0, 20, 20)
 
     def update(self, **dict):
         self.rect.x += 1
         self.rect.y += 1
 
 class ServerHelloDispatch(object):
+    """Dispatch packet unwrapping server hello command"""
     def __init__(self, cmdqueue, players, idalloc):
         self.cmdqueue = cmdqueue
         self.players = players
@@ -164,6 +185,7 @@ class ServerHelloDispatch(object):
             logging.debug("Server:Hello:Client already known")
 
 class ServerQuitDispatch(object):
+    """Dispatch packet unwrapping server quit command"""
     def __init__(self, cmdqueue, players, idalloc):
         self.cmdqueue = cmdqueue
         self.players = players
@@ -182,6 +204,7 @@ class ServerQuitDispatch(object):
             logging.debug("Server:Quit:Client not known")
 
 class ServerCommandDispatch(object):
+    """Dispatch packet unwrapping server command type"""
     def __init__(self, hello_dispatcher, quit_dispatcher):
         self.hello_dispatcher = hello_dispatcher
         self.quit_dispatcher = quit_dispatcher
@@ -198,6 +221,7 @@ class ServerCommandDispatch(object):
             logging.warning("Server:Command:Bad command")
 
 class Server(object):
+    """Handle updating entities and socket server"""
     def __init__(self, sock_server, players):
         self.sock_server = sock_server
         self.players = players
@@ -213,6 +237,7 @@ class Server(object):
         self.sock_server.update()
 
 def create_server(address, port=11235):
+    """Server creation factory method"""
     players = {}
     idalloc = IdentAlloc(256)
     sock_writequeue = SocketWriteQueue()
@@ -229,6 +254,7 @@ def create_server(address, port=11235):
     return server
 
 class ClientBoxman(pygame.sprite.Sprite):
+    """Client Boxman entity"""
     def __init__(self, color=(255,255,255)):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((20,20))
@@ -239,6 +265,7 @@ class ClientBoxman(pygame.sprite.Sprite):
         pass
 
 class ClientQuitDispatch(object):
+    """Dispatch packet unwrapping client quit command"""
     def __init__(self, quit_flag):
         self.quit_flag = quit_flag
 
@@ -246,6 +273,7 @@ class ClientQuitDispatch(object):
         self.quit_flag.set_quit()
 
 class ClientSpawnDispatch(object):
+    """Dispatch packet unwrapping client spawn entity command"""
     def __init__(self, players):
         self.players = players
 
@@ -263,6 +291,7 @@ class ClientSpawnDispatch(object):
             logging.warning("Client:Spawn:Unknown type")
 
 class ClientDestroyDispatch(object):
+    """Dispatch packet unwrapping client destroy entity command"""
     def __init__(self, players):
         self.players = players
 
@@ -275,6 +304,7 @@ class ClientDestroyDispatch(object):
             logging.warning("Client:Destroy:Unknown entity")
 
 class ClientUpdateDispatch(object):
+    """Dispatch packet unwrapping client update entity command"""
     def __init__(self, players):
         self.players = players
 
@@ -287,6 +317,7 @@ class ClientUpdateDispatch(object):
             logging.warning("Client:Update:Unknown entity")
 
 class ClientCommandDispatch(object):
+    """Dispatch packet unwrapping client command type"""
     def __init__(self,
                  quit_dispatcher,
                  spawn_dispatcher,
@@ -314,6 +345,7 @@ class ClientCommandDispatch(object):
             logging.warning("Client:Command:Bad command")
 
 class ClientQuit(object):
+    """Dispatch packet unwrapping client quit command"""
     def __init__(self):
         self.quit = False
 
@@ -324,6 +356,7 @@ class ClientQuit(object):
         return self.quit
 
 class Client(object):
+    """Handle updating and rendering client entities and socket server"""
     def __init__(self, sock_server, sendto, players):
         self.sock_server = sock_server
         self.sendto = sendto
@@ -345,6 +378,7 @@ class Client(object):
             surface.blit(player.image, player.rect)
 
 def create_client(quit_flag, address, port=11235):
+    """Client creation factory method"""
     players = {}
     quit_dispatcher = ClientQuitDispatch(quit_flag)
     spawn_dispatcher = ClientSpawnDispatch(players)
@@ -365,6 +399,7 @@ def create_client(quit_flag, address, port=11235):
     return client
 
 def main(server=True, address="localhost", port=11235):
+    """Entry point"""
     quit_flag = ClientQuit()
     logging.info("Socket Play")
     logging.debug("Start pygame")
@@ -396,7 +431,7 @@ def main(server=True, address="localhost", port=11235):
             server.update()
         client.update()
         # Graphics
-        screen.fill((0,0,0))
+        screen.fill((0, 0, 0))
         client.render(screen)
         pygame.display.flip()
         # Timing
