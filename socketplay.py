@@ -58,6 +58,7 @@ class HelloCommand(object):
         self.packer = packer
 
     def send(self, sendto):
+        logging.debug("Command:Hello:Sent to %s" % repr(sendto))
         self.packer.pack(CMD_HELLO, "", sendto)
 
 class QuitCommand(object):
@@ -66,6 +67,7 @@ class QuitCommand(object):
         self.packer = packer
 
     def send(self, sendto):
+        logging.debug("Command:Quit:Sent to %s" % repr(sendto))
         self.packer.pack(CMD_QUIT, "", sendto)
 
 class SpawnCommand(object):
@@ -73,10 +75,11 @@ class SpawnCommand(object):
     def __init__(self, packer):
         self.packer = packer
 
-    def send(self, entitytype, entityid, color, sendto):
+    def send(self, entitytype, entity, sendto):
+        logging.debug("Command:Spawn:Sent to %s" % repr(sendto))
         self.packer.pack(CMD_SPAWN,
-                         struct.pack("!BBBBB", entitytype, entityid, *color),
-                         sendto)
+                struct.pack("!BBBBB", entitytype, entity.id, *entity.color),
+                sendto)
 
 class DestroyCommand(object):
     """Destroy entity command"""
@@ -84,6 +87,7 @@ class DestroyCommand(object):
         self.packer = packer
 
     def send(self, entityid, sendto):
+        logging.debug("Command:Destroy:Sent to %s" % repr(sendto))
         self.packer.pack(CMD_DESTROY, struct.pack("!B", entityid), sendto)
 
 class UpdateCommand(object):
@@ -91,9 +95,14 @@ class UpdateCommand(object):
     def __init__(self, packer):
         self.packer = packer
 
-    def send(self, entityid, position, sendto):
-        self.packer.pack(CMD_UPDATE, struct.pack("!Bll", entityid, *position),
-                         sendto)
+    def send(self, entities, sendto):
+        if len(entities) < 1:
+            logging.warning("Command:Update:No entities to update!")
+            return
+        data = struct.pack("!I", len(entities))
+        for entity in entities:
+            data += struct.pack("!Bll", entity.id, *entity.rect.topleft)
+        self.packer.pack(CMD_UPDATE, data, sendto)
 
 class HeaderDispatch(object):
     """Dispatch packet unwrapping header"""
@@ -203,14 +212,12 @@ class ServerHelloDispatch(object):
             boxman = ServerBoxman(newid)
             for sendto, player in self.players.iteritems():
                 # Notify new player of existing players
-                self.spawncmd.send(ENT_BOXMAN, player.id, player.color,
-                                   address)
+                self.spawncmd.send(ENT_BOXMAN, player, address)
                 # Notify existing players of new player
-                self.spawncmd.send(ENT_BOXMAN, boxman.id, boxman.color,
-                                   sendto)
+                self.spawncmd.send(ENT_BOXMAN, boxman, sendto)
             self.players[address] = boxman
             # Notify new player of its entity
-            self.spawncmd.send(ENT_PLAYER, newid, boxman.color, address)
+            self.spawncmd.send(ENT_PLAYER, boxman, address)
             logging.debug("Server:Hello:New client:%s", repr(address))
         else:
             logging.debug("Server:Hello:Client already known")
@@ -263,8 +270,7 @@ class Server(object):
         for player in self.players.itervalues():
             player.update()
         for address in self.players.iterkeys():
-            for player in self.players.itervalues():
-                self.updatecmd.send(player.id, player.rect.topleft, address)
+            self.updatecmd.send(self.players.values(), address)
         self.sock_server.update()
 
 def create_server(address, port=11235):
@@ -345,13 +351,18 @@ class ClientUpdateDispatch(object):
     def __init__(self, players):
         self.players = players
 
-    def dispatch(self, data, address):
+    def single(self, data, address):
         id, posx, posy = struct.unpack("!Bll", data[:9])
         pos = (posx, posy)
         if id in self.players:
             self.players[id].rect.topleft = pos
         else:
             logging.warning("Client:Update:Unknown entity")
+
+    def dispatch(self, data, address):
+        count, = struct.unpack("!I", data[:4])
+        for n in range(count):
+            self.single(data[4+9*n:], address)
 
 class ClientCommandDispatch(object):
     """Dispatch packet unwrapping client command type"""
