@@ -125,9 +125,11 @@ class SocketWriteQueue(object):
         self.writequeue.append((data, address))
 
     def write(self, sock):
-        for cmd in self.writequeue:
+        try:
+            cmd = self.writequeue.pop(0)
             sock.sendto(cmd[0], cmd[1])
-        self.writequeue = []
+        except IndexError:
+            pass
 
 class SocketServer(object):
     """Handle socket and dispatch packets"""
