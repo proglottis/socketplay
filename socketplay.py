@@ -12,6 +12,7 @@ Simple client/server python game.
 
 import logging
 import optparse
+import random
 import select
 import socket
 import struct
@@ -33,6 +34,16 @@ logging.basicConfig(level=logging.DEBUG)
     ENT_PLAYER,
     ENT_BOXMAN,
 ) = range(2)
+
+COLORS = (
+    (0, 0, 255),
+    (0, 255, 0),
+    (0, 255, 255),
+    (255, 0, 0),
+    (255, 0, 255),
+    (255, 255, 0),
+    (255, 255, 255),
+)
 
 class HeaderPack(object):
     """Top level packet packer"""
@@ -200,9 +211,9 @@ class ServerBoxman(object):
     """Server Boxman entity"""
     SPEED = 2
 
-    def __init__(self, id, color=(255, 255, 255)):
+    def __init__(self, id):
         self.id = id
-        self.color = color
+        self.color = random.choice(COLORS)
         self.rect = pygame.Rect(0, 0, 20, 20)
         self.north = False
         self.east = False
