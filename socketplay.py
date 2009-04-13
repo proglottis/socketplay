@@ -17,8 +17,6 @@ import socket
 import struct
 
 import pygame
-from pygame import QUIT, KEYDOWN, KEYUP
-from pygame import K_ESCAPE, K_UP, K_DOWN, K_LEFT, K_RIGHT
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -542,29 +540,29 @@ def main(server=True, address="localhost", port=11235):
     while not quit_flag.is_quit():
         # Events
         for event in pygame.event.get():
-            if event.type == QUIT:
+            if event.type == pygame.QUIT:
                 client.send_quit()
-            elif event.type == KEYDOWN:
+            elif event.type == pygame.KEYDOWN:
                 logging.debug("Keydown %s" % pygame.key.name(event.key))
-                if event.key == K_UP:
+                if event.key == pygame.K_UP:
                     client.start_move(north=True)
-                elif event.key == K_RIGHT:
+                elif event.key == pygame.K_RIGHT:
                     client.start_move(east=True)
-                elif event.key == K_DOWN:
+                elif event.key == pygame.K_DOWN:
                     client.start_move(south=True)
-                elif event.key == K_LEFT:
+                elif event.key == pygame.K_LEFT:
                     client.start_move(west=True)
-                elif event.key == K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE:
                     client.send_quit()
-            elif event.type == KEYUP:
+            elif event.type == pygame.KEYUP:
                 logging.debug("Keyup %s" % pygame.key.name(event.key))
-                if event.key == K_UP:
+                if event.key == pygame.K_UP:
                     client.stop_move(north=True)
-                elif event.key == K_RIGHT:
+                elif event.key == pygame.K_RIGHT:
                     client.stop_move(east=True)
-                elif event.key == K_DOWN:
+                elif event.key == pygame.K_DOWN:
                     client.stop_move(south=True)
-                elif event.key == K_LEFT:
+                elif event.key == pygame.K_LEFT:
                     client.stop_move(west=True)
         # Update
         if server:
