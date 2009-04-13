@@ -34,41 +34,66 @@ logging.basicConfig(level=logging.DEBUG)
     ENT_BOXMAN,
 ) = range(2)
 
-def cmd_unpack_command(data, offset=0):
-    """Unpack command type from data"""
-    return struct.unpack("!B", data[offset:offset+1])
+class HeaderPack(object):
+    """Top level packet packer"""
+    def __init__(self, queue):
+        self.queue = queue
 
-def cmd_header(data):
-    """Wrap data with header"""
-    return struct.pack("!6s", "BOXMAN") + data
+    def pack(self, data, sendto):
+        data = struct.pack("!6s", "BOXMAN") + data
+        self.queue.push(data, sendto)
 
-def cmd_command(cmd, data):
-    """Wrap data with command"""
-    return struct.pack("!B", cmd) + data
+class CommandPack(object):
+    """Command packet packer"""
+    def __init__(self, packer):
+        self.packer = packer
 
-def cmd_hello():
-    """Complete client introduction packet"""
-    return cmd_header(cmd_command(CMD_HELLO, ""))
+    def pack(self, cmd, data, sendto):
+        data = struct.pack("!B", cmd) + data
+        self.packer.pack(data, sendto)
 
-def cmd_quit():
-    """Complete client quit packet"""
-    return cmd_header(cmd_command(CMD_QUIT, ""))
+class HelloCommand(object):
+    """Client announce command"""
+    def __init__(self, packer):
+        self.packer = packer
 
-def cmd_spawn(entitytype, entityid, color):
-    """Complete spawn entity packet"""
-    return cmd_header(
-            cmd_command(
-                    CMD_SPAWN,
-                    struct.pack("!BBBBB", entitytype, entityid, *color)))
+    def send(self, sendto):
+        self.packer.pack(CMD_HELLO, "", sendto)
 
-def cmd_destroy(entityid):
-    """Complete destroy entity packet"""
-    return cmd_header(cmd_command(CMD_DESTROY, struct.pack("!B", entityid)))
+class QuitCommand(object):
+    """Client quit command"""
+    def __init__(self, packer):
+        self.packer = packer
 
-def cmd_update(entityid, position):
-    """Complete update entity packet"""
-    return cmd_header(
-            cmd_command(CMD_UPDATE, struct.pack("!Bll", entityid, *position)))
+    def send(self, sendto):
+        self.packer.pack(CMD_QUIT, "", sendto)
+
+class SpawnCommand(object):
+    """Spawn entity command"""
+    def __init__(self, packer):
+        self.packer = packer
+
+    def send(self, entitytype, entityid, color, sendto):
+        self.packer.pack(CMD_SPAWN,
+                         struct.pack("!BBBBB", entitytype, entityid, *color),
+                         sendto)
+
+class DestroyCommand(object):
+    """Destroy entity command"""
+    def __init__(self, packer):
+        self.packer = packer
+
+    def send(self, entityid, sendto):
+        self.packer.pack(CMD_DESTROY, struct.pack("!B", entityid), sendto)
+
+class UpdateCommand(object):
+    """Update entity command"""
+    def __init__(self, packer):
+        self.packer = packer
+
+    def send(self, entityid, position, sendto):
+        self.packer.pack(CMD_UPDATE, struct.pack("!Bll", entityid, *position),
+                         sendto)
 
 class HeaderDispatch(object):
     """Dispatch packet unwrapping header"""
@@ -157,8 +182,8 @@ class ServerBoxman(object):
 
 class ServerHelloDispatch(object):
     """Dispatch packet unwrapping server hello command"""
-    def __init__(self, cmdqueue, players, idalloc):
-        self.cmdqueue = cmdqueue
+    def __init__(self, spawncmd, players, idalloc):
+        self.spawncmd = spawncmd
         self.players = players
         self.idalloc = idalloc
 
@@ -168,26 +193,23 @@ class ServerHelloDispatch(object):
             boxman = ServerBoxman(newid)
             for sendto, player in self.players.iteritems():
                 # Notify new player of existing players
-                self.cmdqueue.push(
-                        cmd_spawn(ENT_BOXMAN, player.id, player.color),
-                        address)
+                self.spawncmd.send(ENT_BOXMAN, player.id, player.color,
+                                   address)
                 # Notify existing players of new player
-                self.cmdqueue.push(
-                        cmd_spawn(ENT_BOXMAN, boxman.id, boxman.color),
-                        sendto)
+                self.spawncmd.send(ENT_BOXMAN, boxman.id, boxman.color,
+                                   sendto)
             self.players[address] = boxman
             # Notify new player of its entity
-            self.cmdqueue.push(
-                    cmd_spawn(ENT_PLAYER, newid, boxman.color),
-                    address)
+            self.spawncmd.send(ENT_PLAYER, newid, boxman.color, address)
             logging.debug("Server:Hello:New client:%s", repr(address))
         else:
             logging.debug("Server:Hello:Client already known")
 
 class ServerQuitDispatch(object):
     """Dispatch packet unwrapping server quit command"""
-    def __init__(self, cmdqueue, players, idalloc):
-        self.cmdqueue = cmdqueue
+    def __init__(self, quitcmd, destroycmd, players, idalloc):
+        self.quitcmd = quitcmd
+        self.destroycmd = destroycmd
         self.players = players
         self.idalloc = idalloc
 
@@ -196,10 +218,10 @@ class ServerQuitDispatch(object):
             oldid = self.players[address].id
             self.idalloc.free(oldid)
             del self.players[address]
-            self.cmdqueue.push(cmd_quit(), address)
+            self.quitcmd.send(address)
             logging.debug("Server:Quit:Client quit:%s", repr(address))
             for address in self.players.iterkeys():
-                self.cmdqueue.push(cmd_destroy(oldid), address)
+                self.destroycmd.send(oldid, address)
         else:
             logging.debug("Server:Quit:Client not known")
 
@@ -222,8 +244,9 @@ class ServerCommandDispatch(object):
 
 class Server(object):
     """Handle updating entities and socket server"""
-    def __init__(self, sock_server, players):
+    def __init__(self, sock_server, updatecmd, players):
         self.sock_server = sock_server
+        self.updatecmd = updatecmd
         self.players = players
 
     def update(self):
@@ -231,9 +254,7 @@ class Server(object):
             player.update()
         for address in self.players.iterkeys():
             for player in self.players.itervalues():
-                self.sock_server.queue.push(
-                    cmd_update(player.id, player.rect.topleft),
-                    address)
+                self.updatecmd.send(player.id, player.rect.topleft, address)
         self.sock_server.update()
 
 def create_server(address, port=11235):
@@ -241,8 +262,14 @@ def create_server(address, port=11235):
     players = {}
     idalloc = IdentAlloc(256)
     sock_writequeue = SocketWriteQueue()
-    hello = ServerHelloDispatch(sock_writequeue, players, idalloc)
-    quit = ServerQuitDispatch(sock_writequeue, players, idalloc)
+    headpack = HeaderPack(sock_writequeue)
+    cmdpack = CommandPack(headpack)
+    quitcmd = QuitCommand(cmdpack)
+    spawncmd = SpawnCommand(cmdpack)
+    destroycmd = DestroyCommand(cmdpack)
+    updatecmd = UpdateCommand(cmdpack)
+    hello = ServerHelloDispatch(spawncmd, players, idalloc)
+    quit = ServerQuitDispatch(quitcmd, destroycmd, players, idalloc)
     cmd = ServerCommandDispatch(hello, quit)
     header = HeaderDispatch(cmd)
     sock_dispatcher = SocketReadDispatch(header)
@@ -250,7 +277,7 @@ def create_server(address, port=11235):
     sock.setblocking(0)
     sock.bind((address, port))
     sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
-    server = Server(sock_server, players)
+    server = Server(sock_server, updatecmd, players)
     return server
 
 class ClientBoxman(pygame.sprite.Sprite):
@@ -357,16 +384,18 @@ class ClientQuit(object):
 
 class Client(object):
     """Handle updating and rendering client entities and socket server"""
-    def __init__(self, sock_server, sendto, players):
+    def __init__(self, sock_server, hellocmd, quitcmd, sendto, players):
         self.sock_server = sock_server
+        self.hellocmd = hellocmd
+        self.quitcmd = quitcmd
         self.sendto = sendto
         self.players = players
 
     def send_hello(self):
-        self.sock_server.queue.push(cmd_hello(), self.sendto)
+        self.hellocmd.send(self.sendto)
 
     def send_quit(self):
-        self.sock_server.queue.push(cmd_quit(), self.sendto)
+        self.quitcmd.send(self.sendto)
 
     def update(self):
         self.sock_server.update()
@@ -391,11 +420,15 @@ def create_client(quit_flag, address, port=11235):
     header_dispatcher = HeaderDispatch(cmd_dispatcher)
     sock_dispatcher = SocketReadDispatch(header_dispatcher)
     sock_writequeue = SocketWriteQueue()
+    headpack = HeaderPack(sock_writequeue)
+    cmdpack = CommandPack(headpack)
+    hellocmd = HelloCommand(cmdpack)
+    quitcmd = QuitCommand(cmdpack)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(0)
     sendto = (address, port)
     sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
-    client = Client(sock_server, sendto, players)
+    client = Client(sock_server, hellocmd, quitcmd, sendto, players)
     return client
 
 def main(server=True, address="localhost", port=11235):
