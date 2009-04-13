@@ -17,7 +17,8 @@ import socket
 import struct
 
 import pygame
-from pygame.locals import QUIT, KEYDOWN, KEYUP, K_ESCAPE
+from pygame import QUIT, KEYDOWN, KEYUP
+from pygame import K_ESCAPE, K_UP, K_DOWN, K_LEFT, K_RIGHT
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -27,7 +28,8 @@ logging.basicConfig(level=logging.DEBUG)
     CMD_SPAWN,
     CMD_DESTROY,
     CMD_UPDATE,
-) = range(5)
+    CMD_CLIENT,
+) = range(6)
 
 (
     ENT_PLAYER,
@@ -103,6 +105,14 @@ class UpdateCommand(object):
         for entity in entities:
             data += struct.pack("!Bll", entity.id, *entity.rect.topleft)
         self.packer.pack(CMD_UPDATE, data, sendto)
+
+class ClientCommand(object):
+    """Update client state command"""
+    def __init__(self, packer):
+        self.packer = packer
+
+    def send(self, direction, sendto):
+        self.packer.pack(CMD_CLIENT, struct.pack("!????", *direction), sendto)
 
 class HeaderDispatch(object):
     """Dispatch packet unwrapping header"""
@@ -190,14 +200,29 @@ class IdentAlloc(object):
 
 class ServerBoxman(object):
     """Server Boxman entity"""
+    SPEED = 2
+
     def __init__(self, id, color=(255, 255, 255)):
         self.id = id
         self.color = color
         self.rect = pygame.Rect(0, 0, 20, 20)
+        self.north = False
+        self.east = False
+        self.south = False
+        self.west = False
+
+    def set_direction(self, direction):
+        self.north, self.east, self.south, self.west = direction
 
     def update(self, **dict):
-        self.rect.x += 1
-        self.rect.y += 1
+        if self.north:
+            self.rect.y -= self.SPEED
+        if self.south:
+            self.rect.y += self.SPEED
+        if self.west:
+            self.rect.x -= self.SPEED
+        if self.east:
+            self.rect.x += self.SPEED
 
 class ServerHelloDispatch(object):
     """Dispatch packet unwrapping server hello command"""
@@ -242,11 +267,24 @@ class ServerQuitDispatch(object):
         else:
             logging.debug("Server:Quit:Client not known")
 
+class ServerClientDispatch(object):
+    """Dispatch packet unwrapping server client state command"""
+    def __init__(self, players):
+        self.players = players
+
+    def dispatch(self, data, address):
+        if address not in self.players:
+            loggin.debug("Server:Client:Client not known")
+            return
+        north, east, south, west = struct.unpack("!????", data[:4])
+        self.players[address].set_direction((north, east, south, west))
+
 class ServerCommandDispatch(object):
     """Dispatch packet unwrapping server command type"""
-    def __init__(self, hello_dispatcher, quit_dispatcher):
+    def __init__(self, hello_dispatcher, quit_dispatcher, client_dispatcher):
         self.hello_dispatcher = hello_dispatcher
         self.quit_dispatcher = quit_dispatcher
+        self.client_dispatcher = client_dispatcher
 
     def dispatch(self, data, address):
         cmd, = struct.unpack("!B", data[:1])
@@ -256,6 +294,8 @@ class ServerCommandDispatch(object):
         elif cmd == CMD_QUIT:
             logging.debug("Server:Command:CMD_QUIT")
             self.quit_dispatcher.dispatch(data[1:], address)
+        elif cmd == CMD_CLIENT:
+            self.client_dispatcher.dispatch(data[1:], address)
         else:
             logging.warning("Server:Command:Bad command")
 
@@ -286,7 +326,8 @@ def create_server(address, port=11235):
     updatecmd = UpdateCommand(cmdpack)
     hello = ServerHelloDispatch(spawncmd, players, idalloc)
     quit = ServerQuitDispatch(quitcmd, destroycmd, players, idalloc)
-    cmd = ServerCommandDispatch(hello, quit)
+    client = ServerClientDispatch(players)
+    cmd = ServerCommandDispatch(hello, quit, client)
     header = HeaderDispatch(cmd)
     sock_dispatcher = SocketReadDispatch(header)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -405,12 +446,19 @@ class ClientQuit(object):
 
 class Client(object):
     """Handle updating and rendering client entities and socket server"""
-    def __init__(self, sock_server, hellocmd, quitcmd, sendto, players):
+    def __init__(self, sock_server, hellocmd, quitcmd, clientcmd, sendto,
+                 players):
         self.sock_server = sock_server
         self.hellocmd = hellocmd
         self.quitcmd = quitcmd
+        self.clientcmd = clientcmd
         self.sendto = sendto
         self.players = players
+        self.north = False
+        self.east = False
+        self.south = False
+        self.west = False
+        self.changed = False
 
     def send_hello(self):
         self.hellocmd.send(self.sendto)
@@ -418,7 +466,28 @@ class Client(object):
     def send_quit(self):
         self.quitcmd.send(self.sendto)
 
+    def send_client(self):
+        if self.changed:
+            dir = (self.north, self.east, self.south, self.west)
+            self.clientcmd.send(dir, self.sendto)
+            self.changed = False
+
+    def start_move(self, north=False, east=False, south=False, west=False):
+        self.north = self.north or north
+        self.east = self.east or east
+        self.south = self.south or south
+        self.west = self.west or west
+        self.changed = north or east or south or west
+
+    def stop_move(self, north=False, east=False, south=False, west=False):
+        self.north = self.north and not north
+        self.east = self.east and not east
+        self.south = self.south and not south
+        self.west = self.west and not west
+        self.changed = north or east or south or west
+
     def update(self):
+        self.send_client()
         self.sock_server.update()
         for player in self.players.itervalues():
             player.update()
@@ -445,11 +514,12 @@ def create_client(quit_flag, address, port=11235):
     cmdpack = CommandPack(headpack)
     hellocmd = HelloCommand(cmdpack)
     quitcmd = QuitCommand(cmdpack)
+    clientcmd = ClientCommand(cmdpack)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(0)
     sendto = (address, port)
     sock_server = SocketServer(sock_dispatcher, sock_writequeue, sock)
-    client = Client(sock_server, hellocmd, quitcmd, sendto, players)
+    client = Client(sock_server, hellocmd, quitcmd, clientcmd, sendto, players)
     return client
 
 def main(server=True, address="localhost", port=11235):
@@ -476,10 +546,26 @@ def main(server=True, address="localhost", port=11235):
                 client.send_quit()
             elif event.type == KEYDOWN:
                 logging.debug("Keydown %s" % pygame.key.name(event.key))
-                if event.key == K_ESCAPE:
+                if event.key == K_UP:
+                    client.start_move(north=True)
+                elif event.key == K_RIGHT:
+                    client.start_move(east=True)
+                elif event.key == K_DOWN:
+                    client.start_move(south=True)
+                elif event.key == K_LEFT:
+                    client.start_move(west=True)
+                elif event.key == K_ESCAPE:
                     client.send_quit()
             elif event.type == KEYUP:
                 logging.debug("Keyup %s" % pygame.key.name(event.key))
+                if event.key == K_UP:
+                    client.stop_move(north=True)
+                elif event.key == K_RIGHT:
+                    client.stop_move(east=True)
+                elif event.key == K_DOWN:
+                    client.stop_move(south=True)
+                elif event.key == K_LEFT:
+                    client.stop_move(west=True)
         # Update
         if server:
             server.update()
