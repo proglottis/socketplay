@@ -124,6 +124,9 @@ class SocketWriteQueue(object):
     def push(self, data, address):
         self.writequeue.append((data, address))
 
+    def empty(self):
+        return len(self.writequeue) < 1
+
     def write(self, sock):
         try:
             cmd = self.writequeue.pop(0)
@@ -138,13 +141,18 @@ class SocketServer(object):
         self.queue = queue
         self.socks = (sock,)
 
-    def update(self):
+    def select(self):
         result = select.select(self.socks, self.socks, (), 0)
         sock_read, sock_write, sock_error = result
         for sock in sock_read:
             self.dispatcher.dispatch(sock)
         for sock in sock_write:
             self.queue.write(sock)
+
+    def update(self):
+        self.select()
+        while not self.queue.empty():
+            self.select()
 
 class IdentFetchError(Exception):
     """Error raised when no unique identities are available"""
