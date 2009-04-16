@@ -9,12 +9,12 @@ Protocol command interpret/dispatch
 # To Public License, Version 2, as published by Sam Hocevar. See
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
-import logging as logging_
+import logging
 import struct
 
 from protocol.local import *
 
-logging = logging_.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 class HeaderDispatch(object):
     """Dispatch packet unwrapping header"""
@@ -47,9 +47,9 @@ class ServerHelloDispatch(object):
             self.players[address] = boxman
             # Notify new player of its entity
             self.spawncmd.send(ENT_PLAYER, boxman, address)
-            logging.debug("Server:Hello:New client:%s", repr(address))
+            logger.debug("Server:Hello:New client:%s", repr(address))
         else:
-            logging.debug("Server:Hello:Client already known")
+            logger.debug("Server:Hello:Client already known")
 
 class ServerQuitDispatch(object):
     """Dispatch packet unwrapping server quit command"""
@@ -65,11 +65,11 @@ class ServerQuitDispatch(object):
             self.idalloc.free(oldid)
             del self.players[address]
             self.quitcmd.send(address)
-            logging.debug("Server:Quit:Client quit:%s", repr(address))
+            logger.debug("Server:Quit:Client quit:%s", repr(address))
             for address in self.players.iterkeys():
                 self.destroycmd.send(oldid, address)
         else:
-            logging.debug("Server:Quit:Client not known")
+            logger.debug("Server:Quit:Client not known")
 
 class ServerClientDispatch(object):
     """Dispatch packet unwrapping server client state command"""
@@ -93,15 +93,15 @@ class ServerCommandDispatch(object):
     def dispatch(self, data, address):
         cmd, = struct.unpack("!B", data[:1])
         if cmd == CMD_HELLO:
-            logging.debug("Server:Command:CMD_HELLO")
+            logger.debug("Server:Command:CMD_HELLO")
             self.hello_dispatcher.dispatch(data[1:], address)
         elif cmd == CMD_QUIT:
-            logging.debug("Server:Command:CMD_QUIT")
+            logger.debug("Server:Command:CMD_QUIT")
             self.quit_dispatcher.dispatch(data[1:], address)
         elif cmd == CMD_CLIENT:
             self.client_dispatcher.dispatch(data[1:], address)
         else:
-            logging.warning("Server:Command:Bad command")
+            logger.warning("Server:Command:Bad command")
 
 class ClientQuitDispatch(object):
     """Dispatch packet unwrapping client quit command"""
@@ -120,15 +120,15 @@ class ClientSpawnDispatch(object):
     def dispatch(self, data, address):
         type, id, color_r, color_g, color_b = struct.unpack("!BBBBB", data[:5])
         color = (color_r, color_g, color_b)
-        logging.debug("Client:Spawn:Spawn entity %d" % id)
+        logger.debug("Client:Spawn:Spawn entity %d" % id)
         if type == ENT_PLAYER:
-            logging.debug("Client:Spawn:ENT_PLAYER")
+            logger.debug("Client:Spawn:ENT_PLAYER")
             self.players[id] = self.entfactory.create(color)
         elif type == ENT_BOXMAN:
-            logging.debug("Client:Spawn:ENT_BOXMAN")
+            logger.debug("Client:Spawn:ENT_BOXMAN")
             self.players[id] = self.entfactory.create(color)
         else:
-            logging.warning("Client:Spawn:Unknown type")
+            logger.warning("Client:Spawn:Unknown type")
 
 class ClientDestroyDispatch(object):
     """Dispatch packet unwrapping client destroy entity command"""
@@ -138,10 +138,10 @@ class ClientDestroyDispatch(object):
     def dispatch(self, data, address):
         id, = struct.unpack("!B", data[:1])
         if id in self.players:
-            logging.debug("Client:Destroy:Destroy entity %d" % id)
+            logger.debug("Client:Destroy:Destroy entity %d" % id)
             del self.players[id]
         else:
-            logging.warning("Client:Destroy:Unknown entity")
+            logger.warning("Client:Destroy:Unknown entity")
 
 class ClientUpdateDispatch(object):
     """Dispatch packet unwrapping client update entity command"""
@@ -154,7 +154,7 @@ class ClientUpdateDispatch(object):
         if id in self.players:
             self.players[id].rect.topleft = pos
         else:
-            logging.warning("Client:Update:Unknown entity")
+            logger.warning("Client:Update:Unknown entity")
 
     def dispatch(self, data, address):
         count, = struct.unpack("!I", data[:4])
@@ -176,15 +176,15 @@ class ClientCommandDispatch(object):
     def dispatch(self, data, address):
         cmd, = struct.unpack("!B", data[:1])
         if cmd == CMD_QUIT:
-            logging.debug("Client:Command:CMD_QUIT")
+            logger.debug("Client:Command:CMD_QUIT")
             self.quit_dispatcher.dispatch(data[1:], address)
         elif cmd == CMD_SPAWN:
-            logging.debug("Client:Command:CMD_SPAWN")
+            logger.debug("Client:Command:CMD_SPAWN")
             self.spawn_dispatcher.dispatch(data[1:], address)
         elif cmd == CMD_DESTROY:
-            logging.debug("Client:Command:CMD_DESTROY")
+            logger.debug("Client:Command:CMD_DESTROY")
             self.destroy_dispatcher.dispatch(data[1:], address)
         elif cmd == CMD_UPDATE:
             self.update_dispatcher.dispatch(data[1:], address)
         else:
-            logging.warning("Client:Command:Bad command")
+            logger.warning("Client:Command:Bad command")
