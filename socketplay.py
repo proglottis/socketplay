@@ -16,7 +16,7 @@ import optparse
 import random
 import struct
 
-import pygame
+import pyglet
 
 from protocol import command, dispatch
 import sockwrap
@@ -50,7 +50,7 @@ class IdentAlloc(object):
 
 class ServerBoxman(object):
     """Server Boxman entity"""
-    SPEED = 2
+    SPEED = 100
     COLORS = (
         (0, 0, 255),
         (0, 255, 0),
@@ -64,24 +64,33 @@ class ServerBoxman(object):
     def __init__(self, id):
         self.id = id
         self.color = random.choice(self.COLORS)
-        self.rect = pygame.Rect(0, 0, 20, 20)
+        self.x = 0
+        self.y = 0
         self.north = False
         self.east = False
         self.south = False
         self.west = False
 
+    def get_position(self):
+        return (self.x, self.y)
+
+    def set_position(self, x, y):
+        self.x = x
+        self.y = y
+
     def set_direction(self, direction):
         self.north, self.east, self.south, self.west = direction
 
-    def update(self, **dict):
+    def update(self, dt):
+        speed = self.SPEED * dt
         if self.north:
-            self.rect.y -= self.SPEED
+            self.y += speed
         if self.south:
-            self.rect.y += self.SPEED
+            self.y -= speed
         if self.west:
-            self.rect.x -= self.SPEED
+            self.x -= speed
         if self.east:
-            self.rect.x += self.SPEED
+            self.x += speed
 
 class ServerBoxmanFactory(object):
     """Server Boxman entity factory"""
@@ -95,9 +104,9 @@ class Server(object):
         self.updatecmd = updatecmd
         self.players = players
 
-    def update(self):
+    def update(self, dt):
         for player in self.players.itervalues():
-            player.update()
+            player.update(dt)
         for address in self.players.iterkeys():
             self.updatecmd.send(self.players.values(), address)
         self.sock_server.update()
@@ -126,37 +135,41 @@ def create_server(address, port=11235):
     server = Server(sock_server, updatecmd, players)
     return server
 
-class ClientBoxman(pygame.sprite.Sprite):
+class ClientBoxman(pyglet.sprite.Sprite):
     """Client Boxman entity"""
-    def __init__(self, color=(255,255,255)):
-        pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((20,20))
-        self.image.fill(color)
-        self.rect = self.image.get_rect()
-
-    def update(self, **dict):
-        pass
+    def __init__(self, color=(255,255,255), batch=None, group=None):
+        super(ClientBoxman, self).__init__(
+                pyglet.resource.image('boxman.png'),
+                batch=batch, group=group)
 
 class ClientBoxmanFactory(object):
     """Client Boxman entity factory"""
-    def create(self, color):
-        return ClientBoxman(color)
+    def __init__(self, batch):
+        self.batch = batch
 
-class ClientQuit(object):
+    def create(self, color):
+        return ClientBoxman(color, batch=self.batch)
+
+class ClientQuit(pyglet.event.EventDispatcher):
     """Dispatch packet unwrapping client quit command"""
     def __init__(self):
         self.quit = False
 
     def set_quit(self):
         self.quit = True
+        self.dispatch_event('on_quit')
 
     def is_quit(self):
         return self.quit
 
+ClientQuit.register_event_type('on_quit')
+
 class Client(object):
     """Handle updating and rendering client entities and socket server"""
-    def __init__(self, sock_server, hellocmd, quitcmd, clientcmd, sendto,
+    def __init__(self, batch, sock_server, hellocmd, quitcmd, clientcmd,
+                 sendto,
                  players):
+        self.batch = batch
         self.sock_server = sock_server
         self.hellocmd = hellocmd
         self.quitcmd = quitcmd
@@ -195,20 +208,16 @@ class Client(object):
         self.west = self.west and not west
         self.changed = north or east or south or west
 
-    def update(self):
+    def update(self, dt):
         self.send_client()
         self.sock_server.update()
-        for player in self.players.itervalues():
-            player.update()
-
-    def render(self, surface):
-        for player in self.players.itervalues():
-            surface.blit(player.image, player.rect)
+        self.batch.draw()
 
 def create_client(quit_flag, address, port=11235):
     """Client creation factory method"""
     players = {}
-    boxmanfactory = ClientBoxmanFactory()
+    batch = pyglet.graphics.Batch()
+    boxmanfactory = ClientBoxmanFactory(batch)
     quit_dispatcher = dispatch.ClientQuitDispatch(quit_flag)
     spawn_dispatcher = dispatch.ClientSpawnDispatch(players, boxmanfactory)
     destroy_dispatcher = dispatch.ClientDestroyDispatch(players)
@@ -228,64 +237,62 @@ def create_client(quit_flag, address, port=11235):
     sock = sockwrap.create_client_socket()
     sendto = (address, port)
     sock_server = sockwrap.SocketServer(sock_dispatcher, sock_writequeue, sock)
-    client = Client(sock_server, hellocmd, quitcmd, clientcmd, sendto, players)
+    client = Client(batch,sock_server, hellocmd, quitcmd, clientcmd, sendto,
+                    players)
     return client
+
+class MainWindow(pyglet.window.Window):
+    def __init__(self, client):
+        super(MainWindow, self).__init__()
+        self.clock = pyglet.clock.ClockDisplay()
+        self.batch = client.batch
+        self.client = client
+
+    def on_key_press(self, symbol, modifiers):
+        if symbol == pyglet.window.key.UP:
+            self.client.start_move(north=True)
+        elif symbol == pyglet.window.key.RIGHT:
+            self.client.start_move(east=True)
+        elif symbol == pyglet.window.key.DOWN:
+            self.client.start_move(south=True)
+        elif symbol == pyglet.window.key.LEFT:
+            self.client.start_move(west=True)
+        elif symbol == pyglet.window.key.ESCAPE:
+            self.client.send_quit()
+
+    def on_key_release(self, symbol, modifiers):
+        if symbol == pyglet.window.key.UP:
+            self.client.stop_move(north=True)
+        elif symbol == pyglet.window.key.RIGHT:
+            self.client.stop_move(east=True)
+        elif symbol == pyglet.window.key.DOWN:
+            self.client.stop_move(south=True)
+        elif symbol == pyglet.window.key.LEFT:
+            self.client.stop_move(west=True)
+
+    def on_client_quit(self):
+        self.close()
+
+    def on_draw(self):
+        self.clear()
+        self.batch.draw()
+        self.clock.draw()
 
 def main(server=True, address="localhost", port=11235):
     """Entry point"""
     quit_flag = ClientQuit()
-    logging.info("Socket Play")
-    logging.debug("Start pygame")
-    pygame.init()
-    logging.debug("Create screen")
-    screen = pygame.display.set_mode((800, 600))
-    logging.debug("Create timer")
-    clock = pygame.time.Clock()
     if server:
         logging.debug("Start server")
         server = create_server("0.0.0.0", port)
+        pyglet.clock.schedule_interval(server.update, 1/30.0)
     logging.debug("Start client")
     client = create_client(quit_flag, address, port)
     client.send_hello()
-    logging.debug("Start game loop")
-    while not quit_flag.is_quit():
-        # Events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                client.send_quit()
-            elif event.type == pygame.KEYDOWN:
-                logging.debug("Keydown %s" % pygame.key.name(event.key))
-                if event.key == pygame.K_UP:
-                    client.start_move(north=True)
-                elif event.key == pygame.K_RIGHT:
-                    client.start_move(east=True)
-                elif event.key == pygame.K_DOWN:
-                    client.start_move(south=True)
-                elif event.key == pygame.K_LEFT:
-                    client.start_move(west=True)
-                elif event.key == pygame.K_ESCAPE:
-                    client.send_quit()
-            elif event.type == pygame.KEYUP:
-                logging.debug("Keyup %s" % pygame.key.name(event.key))
-                if event.key == pygame.K_UP:
-                    client.stop_move(north=True)
-                elif event.key == pygame.K_RIGHT:
-                    client.stop_move(east=True)
-                elif event.key == pygame.K_DOWN:
-                    client.stop_move(south=True)
-                elif event.key == pygame.K_LEFT:
-                    client.stop_move(west=True)
-        # Update
-        if server:
-            server.update()
-        client.update()
-        # Graphics
-        screen.fill((0, 0, 0))
-        client.render(screen)
-        pygame.display.flip()
-        # Timing
-        clock.tick(60)
-    logging.info("Quit")
+    pyglet.clock.schedule_interval(client.update, 1/60.0)
+    logging.debug("Open window")
+    window = MainWindow(client)
+    quit_flag.push_handlers(on_quit=window.on_client_quit)
+    pyglet.app.run()
 
 if __name__ == "__main__":
     parser = optparse.OptionParser()

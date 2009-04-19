@@ -78,7 +78,7 @@ class ServerClientDispatch(object):
 
     def dispatch(self, data, address):
         if address not in self.players:
-            loggin.debug("Server:Client:Client not known")
+            logger.debug("Server:Client:Client not known")
             return
         north, east, south, west = struct.unpack("!????", data[:4])
         self.players[address].set_direction((north, east, south, west))
@@ -152,7 +152,7 @@ class ClientUpdateDispatch(object):
         id, posx, posy = struct.unpack("!Bll", data[:9])
         pos = (posx, posy)
         if id in self.players:
-            self.players[id].rect.topleft = pos
+            self.players[id].set_position(*pos)
         else:
             logger.warning("Client:Update:Unknown entity")
 
