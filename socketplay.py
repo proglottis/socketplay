@@ -256,6 +256,8 @@ class MainWindow(pyglet.window.Window):
 
 def main(server=True, address="localhost", port=11235):
     """Entry point"""
+    pyglet.resource.path = ['res', 'res/images']
+    pyglet.resource.reindex()
     quit_flag = ClientQuit()
     if server:
         logging.debug("Start server")
