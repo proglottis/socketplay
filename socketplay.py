@@ -19,34 +19,10 @@ import struct
 import pyglet
 
 from protocol import command, dispatch
+from util import IdentAlloc, IdentFetchError
 import sockwrap
 
 logging.basicConfig(level=logging.DEBUG)
-
-class IdentFetchError(Exception):
-    """Error raised when no unique identities are available"""
-    pass
-
-class IdentAlloc(object):
-    """Manage unique identity numbers in range"""
-    def __init__(self, idrange):
-        self.__used = []
-        self.__free = [x for x in range(idrange)]
-
-    def free(self, oldid):
-        try:
-            used_index = self.__used.index(oldid)
-            self.__free.append(oldid)
-            del self.__used[used_index]
-        except ValueError:
-            pass
-
-    def fetch(self):
-        if len(self.__free) < 1:
-            raise IdentFetchError("no more ID's in range")
-        newid = self.__free.pop(0)
-        self.__used.append(newid)
-        return newid
 
 class ServerBoxman(object):
     """Server Boxman entity"""
