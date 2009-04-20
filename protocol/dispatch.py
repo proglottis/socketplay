@@ -83,7 +83,7 @@ class SpawnDispatch(pyglet.event.EventDispatcher):
     def dispatch(self, data, address):
         type, id, color_r, color_g, color_b = struct.unpack("!BBBBB", data[:5])
         color = (color_r, color_g, color_b)
-        self.dispatch_event('on_spawn_entity', type, id, color)
+        self.dispatch_event('on_spawn_entity', type, id, color, address)
 
 SpawnDispatch.register_event_type('on_spawn_entity')
 
@@ -94,7 +94,7 @@ class DestroyDispatch(pyglet.event.EventDispatcher):
 
     def dispatch(self, data, address):
         id, = struct.unpack("!B", data[:1])
-        self.dispatch_event('on_destroy_entity', id)
+        self.dispatch_event('on_destroy_entity', id, address)
 
 DestroyDispatch.register_event_type('on_destroy_entity')
 
@@ -106,7 +106,7 @@ class UpdateDispatch(pyglet.event.EventDispatcher):
     def single(self, data, address):
         id, posx, posy = struct.unpack("!Bll", data[:9])
         pos = (posx, posy)
-        self.dispatch_event('on_update_entity', id, pos)
+        self.dispatch_event('on_update_entity', id, pos, address)
 
     def dispatch(self, data, address):
         count, = struct.unpack("!I", data[:4])
@@ -123,6 +123,6 @@ class ClientDispatch(pyglet.event.EventDispatcher):
 
     def dispatch(self, data, address):
         north, east, south, west = struct.unpack("!????", data[:4])
-        self.dispatch_event('on_client', address, (north, east, south, west))
+        self.dispatch_event('on_client', (north, east, south, west), address)
 
 ClientDispatch.register_event_type('on_client')

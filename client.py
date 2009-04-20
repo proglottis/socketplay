@@ -76,7 +76,7 @@ class Client(pyglet.event.EventDispatcher):
     def on_quit(self, address):
         self.dispatch_event('on_client_quit')
 
-    def on_spawn_entity(self, type, id, color):
+    def on_spawn_entity(self, type, id, color, address):
         logger.debug("Spawn:Entity %d" % id)
         if type == ENT_PLAYER:
             logger.debug("Spawn:ENT_PLAYER")
@@ -87,14 +87,14 @@ class Client(pyglet.event.EventDispatcher):
         else:
             logger.warning("Spawn:Unknown type")
 
-    def on_destroy_entity(self, id):
+    def on_destroy_entity(self, id, address):
         if id in self.players:
             logger.debug("Destroy:Entity %d" % id)
             del self.players[id]
         else:
             logger.warning("Destroy:Unknown entity %d" % id)
 
-    def on_update_entity(self, id, pos):
+    def on_update_entity(self, id, pos, address):
         if id not in self.players:
             return
         self.players[id].set_position(*pos)

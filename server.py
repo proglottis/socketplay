@@ -108,7 +108,7 @@ class Server(object):
         else:
             logger.debug("Quit:Client unknown")
 
-    def on_client(self, address, direction):
+    def on_client(self, direction, address):
         if address not in self.players:
             logger.debug("Client:Client unknown")
             return
