@@ -49,6 +49,13 @@ class ColoredSprite(pyglet.sprite.Sprite):
                 batch=batch,
                 group=group)
 
+    def __alpha_blend(self, src, dst, alpha):
+        """Alpha blend 0-255 integer color channel
+
+        See http://www.codeguru.com/cpp/cpp/algorithms/general/article.php/c15989/
+        """
+        return ((src * alpha) + (dst * (255 - alpha))) // 255
+
     def __generate_image(self, image, mask, color):
         mask_data = mask.get_image_data().get_data('L', mask.width)
         image_data = image.get_image_data().get_data('RGBA', image.width * 4)
@@ -56,16 +63,21 @@ class ColoredSprite(pyglet.sprite.Sprite):
         for index, alpha in enumerate(mask_data):
             alpha_ord = ord(alpha)
             if alpha_ord > 0:
-                new_data += chr(color[0]) + \
-                            chr(color[1]) + \
-                            chr(color[2]) + \
+                img_color = (ord(image_data[index*4]),
+                             ord(image_data[index*4+1]),
+                             ord(image_data[index*4+2]))
+                new_data += chr(self.__alpha_blend(color[0], img_color[0],
+                                                   alpha_ord)) + \
+                            chr(self.__alpha_blend(color[1], img_color[1],
+                                                   alpha_ord)) + \
+                            chr(self.__alpha_blend(color[2], img_color[2],
+                                                   alpha_ord)) + \
                             image_data[index*4+3]
             else:
                 new_data += image_data[index*4] + \
                             image_data[index*4+1] + \
                             image_data[index*4+2] + \
                             image_data[index*4+3]
-        image.get_image_data().set_data('RGBA', image.width * 4, new_data)
         return pyglet.image.ImageData(image.width, image.height, "RGBA",
                                       new_data, image.width * 4)
 
