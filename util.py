@@ -40,26 +40,3 @@ class IdentAlloc(object):
         newid = self.__free.pop(0)
         self.__used.append(newid)
         return newid
-
-class DispatchFlag(pyglet.event.EventDispatcher):
-    """Flag that dispatches events on change"""
-    def __init__(self, initial=False):
-        super(DispatchFlag, self).__init__()
-        self.flag = initial
-
-    def set(self):
-        """Set flag"""
-        self.flag = True
-        self.dispatch_event('on_set')
-
-    def clear(self):
-        """Clear flag"""
-        self.flag = False
-        self.dispatch_event('on_clear')
-
-    def is_set(self):
-        """Check if flag is set"""
-        return self.flag
-
-DispatchFlag.register_event_type('on_set')
-DispatchFlag.register_event_type('on_clear')

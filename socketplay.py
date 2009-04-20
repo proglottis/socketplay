@@ -16,7 +16,6 @@ import optparse
 
 import pyglet
 
-from util import DispatchFlag
 from client import create_client
 from server import create_server
 
