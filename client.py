@@ -120,7 +120,6 @@ class Client(pyglet.event.EventDispatcher):
     def update(self, dt):
         self.send_client()
         self.sock_server.update()
-        self.batch.draw()
 
     def draw(self):
         self.batch.draw()
