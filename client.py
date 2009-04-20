@@ -48,14 +48,6 @@ class ClientBoxman(pyglet.sprite.Sprite):
                                    color),
                 batch=batch, group=group)
 
-class ClientBoxmanFactory(object):
-    """Client Boxman entity factory"""
-    def __init__(self, batch):
-        self.batch = batch
-
-    def create(self, color):
-        return ClientBoxman(color, batch=self.batch)
-
 class Client(pyglet.event.EventDispatcher):
     """Handle updating and rendering client entities and socket server"""
     def __init__(self, batch, sock_server, hellocmd, quitcmd, clientcmd,
@@ -139,8 +131,6 @@ def create_client(address, port=11235):
     """Client creation factory method"""
     players = {}
     batch = pyglet.graphics.Batch()
-    boxmanfactory = ClientBoxmanFactory(batch)
-
     quit_dispatcher = dispatch.QuitDispatch()
     spawn_dispatcher = dispatch.SpawnDispatch()
     destroy_dispatcher = dispatch.DestroyDispatch()

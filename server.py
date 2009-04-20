@@ -63,11 +63,6 @@ class ServerBoxman(object):
         if self.east:
             self.x += speed
 
-class ServerBoxmanFactory(object):
-    """Server Boxman entity factory"""
-    def create(self, id):
-        return ServerBoxman(id)
-
 class Server(object):
     """Handle updating entities and socket server"""
     def __init__(self, sock_server, quitcmd, spawncmd, destroycmd, updatecmd,
@@ -126,7 +121,6 @@ def create_server(address, port=11235):
     players = {}
     idalloc = IdentAlloc(256)
     sock_writequeue = sockwrap.SocketWriteQueue()
-    boxmanfactory = ServerBoxmanFactory()
     headpack = command.HeaderPack(sock_writequeue)
     cmdpack = command.CommandPack(headpack)
     quitcmd = command.QuitCommand(cmdpack)
