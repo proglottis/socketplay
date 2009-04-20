@@ -19,11 +19,33 @@ import sockwrap
 
 logger = logging.getLogger(__name__)
 
+def image_player_color(image, mask, color):
+    mask_data = mask.get_image_data().get_data('L', mask.width)
+    image_data = image.get_image_data().get_data('RGBA', image.width * 4)
+    new_data = ""
+    for index, alpha in enumerate(mask_data):
+        alpha_ord = ord(alpha)
+        if alpha_ord > 0:
+            new_data += chr(color[0]) + \
+                        chr(color[1]) + \
+                        chr(color[2]) + \
+                        image_data[index*4+3]
+        else:
+            new_data += image_data[index*4] + \
+                        image_data[index*4+1] + \
+                        image_data[index*4+2] + \
+                        image_data[index*4+3]
+    image.get_image_data().set_data('RGBA', image.width * 4, new_data)
+    return pyglet.image.ImageData(image.width, image.height, "RGBA", new_data,
+                                  image.width * 4)
+
 class ClientBoxman(pyglet.sprite.Sprite):
     """Client Boxman entity"""
-    def __init__(self, color=(255, 255, 255), batch=None, group=None):
+    def __init__(self, color, batch=None, group=None):
         super(ClientBoxman, self).__init__(
-                pyglet.resource.image('boxman.png'),
+                image_player_color(pyglet.resource.image('boxman.png'),
+                                   pyglet.resource.image('boxman-color.png'),
+                                   color),
                 batch=batch, group=group)
 
 class ClientBoxmanFactory(object):
