@@ -9,10 +9,15 @@ Game client
 # To Public License, Version 2, as published by Sam Hocevar. See
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
+import logging
+
 import pyglet
 
 from protocol import command, dispatch
+from protocol.local import *
 import sockwrap
+
+logger = logging.getLogger(__name__)
 
 class ClientBoxman(pyglet.sprite.Sprite):
     """Client Boxman entity"""
@@ -29,26 +34,10 @@ class ClientBoxmanFactory(object):
     def create(self, color):
         return ClientBoxman(color, batch=self.batch)
 
-class ClientQuit(pyglet.event.EventDispatcher):
-    """Dispatch packet unwrapping client quit command"""
-    def __init__(self):
-        super(ClientQuit, self).__init__()
-        self.quit = False
-
-    def set_quit(self):
-        self.quit = True
-        self.dispatch_event('on_quit')
-
-    def is_quit(self):
-        return self.quit
-
-ClientQuit.register_event_type('on_quit')
-
-class Client(object):
+class Client(pyglet.event.EventDispatcher):
     """Handle updating and rendering client entities and socket server"""
     def __init__(self, batch, sock_server, hellocmd, quitcmd, clientcmd,
-                 sendto,
-                 players):
+                 sendto, players):
         self.batch = batch
         self.sock_server = sock_server
         self.hellocmd = hellocmd
@@ -61,6 +50,32 @@ class Client(object):
         self.south = False
         self.west = False
         self.changed = False
+
+    def on_quit(self, address):
+        self.dispatch_event('on_client_quit')
+
+    def on_spawn_entity(self, type, id, color):
+        logger.debug("Spawn:Entity %d" % id)
+        if type == ENT_PLAYER:
+            logger.debug("Spawn:ENT_PLAYER")
+            self.players[id] = ClientBoxman(color, batch=self.batch)
+        elif type == ENT_BOXMAN:
+            logger.debug("Spawn:ENT_BOXMAN")
+            self.players[id] = ClientBoxman(color, batch=self.batch)
+        else:
+            logger.warning("Spawn:Unknown type")
+
+    def on_destroy_entity(self, id):
+        if id in self.players:
+            logger.debug("Destroy:Entity %d" % id)
+            del self.players[id]
+        else:
+            logger.warning("Destroy:Unknown entity %d" % id)
+
+    def on_update_entity(self, id, pos):
+        if id not in self.players:
+            return
+        self.players[id].set_position(*pos)
 
     def send_hello(self):
         self.hellocmd.send(self.sendto)
@@ -93,20 +108,27 @@ class Client(object):
         self.sock_server.update()
         self.batch.draw()
 
-def create_client(quit_flag, address, port=11235):
+Client.register_event_type('on_client_quit')
+
+def create_client(address, port=11235):
     """Client creation factory method"""
     players = {}
     batch = pyglet.graphics.Batch()
     boxmanfactory = ClientBoxmanFactory(batch)
-    quit_dispatcher = dispatch.ClientQuitDispatch(quit_flag)
-    spawn_dispatcher = dispatch.ClientSpawnDispatch(players, boxmanfactory)
-    destroy_dispatcher = dispatch.ClientDestroyDispatch(players)
-    update_dispatcher = dispatch.ClientUpdateDispatch(players)
-    cmd_dispatcher = dispatch.ClientCommandDispatch(quit_dispatcher,
-                                                    spawn_dispatcher,
-                                                    destroy_dispatcher,
-                                                    update_dispatcher)
-    header_dispatcher = dispatch.HeaderDispatch(cmd_dispatcher)
+
+    quit_dispatcher = dispatch.QuitDispatch()
+    spawn_dispatcher = dispatch.SpawnDispatch()
+    destroy_dispatcher = dispatch.DestroyDispatch()
+    update_dispatcher = dispatch.UpdateDispatch()
+    cmd_dispatcher = dispatch.CommandDispatch()
+    cmd_dispatcher.push_handlers(received_quit=quit_dispatcher.dispatch,
+                                 received_spawn=spawn_dispatcher.dispatch,
+                                 received_destroy=destroy_dispatcher.dispatch,
+                                 received_update=update_dispatcher.dispatch)
+
+    header_dispatcher = dispatch.HeaderDispatch()
+    header_dispatcher.push_handlers(received_header=cmd_dispatcher.dispatch)
+
     sock_dispatcher = sockwrap.SocketReadDispatch(header_dispatcher)
     sock_writequeue = sockwrap.SocketWriteQueue()
     headpack = command.HeaderPack(sock_writequeue)
@@ -119,4 +141,8 @@ def create_client(quit_flag, address, port=11235):
     sock_server = sockwrap.SocketServer(sock_dispatcher, sock_writequeue, sock)
     client = Client(batch, sock_server, hellocmd, quitcmd, clientcmd, sendto,
                     players)
+    quit_dispatcher.push_handlers(client)
+    spawn_dispatcher.push_handlers(client)
+    destroy_dispatcher.push_handlers(client)
+    update_dispatcher.push_handlers(client)
     return client

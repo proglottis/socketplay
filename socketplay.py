@@ -16,7 +16,8 @@ import optparse
 
 import pyglet
 
-from client import create_client, ClientQuit
+from util import DispatchFlag
+from client import create_client
 from server import create_server
 
 logging.basicConfig(level=logging.DEBUG)
@@ -62,18 +63,17 @@ def start(server=True, address="localhost", port=11235):
     """Entry point"""
     pyglet.resource.path = ['res', 'res/images']
     pyglet.resource.reindex()
-    quit_flag = ClientQuit()
     if server:
         logging.debug("Start server")
         server = create_server("0.0.0.0", port)
         pyglet.clock.schedule_interval(server.update, 1/30.0)
     logging.debug("Start client")
-    client = create_client(quit_flag, address, port)
+    client = create_client(address, port)
     client.send_hello()
     pyglet.clock.schedule_interval(client.update, 1/60.0)
     logging.debug("Open window")
     window = MainWindow(client)
-    quit_flag.push_handlers(on_quit=window.on_client_quit)
+    client.push_handlers(window)
     pyglet.app.run()
 
 def parse_arguments():

@@ -11,6 +11,8 @@ These are small enough not to require a module of their own.
 # To Public License, Version 2, as published by Sam Hocevar. See
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
+import pyglet
+
 class IdentFetchError(Exception):
     """Error raised when no unique identities are available"""
     pass
@@ -22,16 +24,42 @@ class IdentAlloc(object):
         self.__free = [x for x in range(idrange)]
 
     def free(self, oldid):
+        """Tell ID allocator an ID is free"""
         try:
             used_index = self.__used.index(oldid)
             self.__free.append(oldid)
             del self.__used[used_index]
         except ValueError:
+            # Don't error on free
             pass
 
     def fetch(self):
+        """Get new unique ID from allocator"""
         if len(self.__free) < 1:
             raise IdentFetchError("no more ID's in range")
         newid = self.__free.pop(0)
         self.__used.append(newid)
         return newid
+
+class DispatchFlag(pyglet.event.EventDispatcher):
+    """Flag that dispatches events on change"""
+    def __init__(self, initial=False):
+        super(DispatchFlag, self).__init__()
+        self.flag = initial
+
+    def set(self):
+        """Set flag"""
+        self.flag = True
+        self.dispatch_event('on_set')
+
+    def clear(self):
+        """Clear flag"""
+        self.flag = False
+        self.dispatch_event('on_clear')
+
+    def is_set(self):
+        """Check if flag is set"""
+        return self.flag
+
+DispatchFlag.register_event_type('on_set')
+DispatchFlag.register_event_type('on_clear')
