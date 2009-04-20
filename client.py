@@ -130,6 +130,9 @@ class Client(pyglet.event.EventDispatcher):
         self.sock_server.update()
         self.batch.draw()
 
+    def draw(self):
+        self.batch.draw()
+
 Client.register_event_type('on_client_quit')
 
 def create_client(address, port=11235):

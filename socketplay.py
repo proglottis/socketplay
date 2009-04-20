@@ -26,7 +26,6 @@ class MainWindow(pyglet.window.Window):
     def __init__(self, client):
         super(MainWindow, self).__init__()
         self.clock = pyglet.clock.ClockDisplay()
-        self.batch = client.batch
         self.client = client
 
     def on_key_press(self, symbol, modifiers):
@@ -56,7 +55,7 @@ class MainWindow(pyglet.window.Window):
 
     def on_draw(self):
         self.clear()
-        self.batch.draw()
+        self.client.draw()
         self.clock.draw()
 
 def start(server=True, address="localhost", port=11235):
