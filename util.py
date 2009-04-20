@@ -40,3 +40,32 @@ class IdentAlloc(object):
         newid = self.__free.pop(0)
         self.__used.append(newid)
         return newid
+
+class ColoredSprite(pyglet.sprite.Sprite):
+    """Sprite that replaces a color based on a color mask image"""
+    def __init__(self, image, mask, color, batch=None, group=None):
+        super(ColoredSprite, self).__init__(
+                self.__generate_image(image, mask, color),
+                batch=batch,
+                group=group)
+
+    def __generate_image(self, image, mask, color):
+        mask_data = mask.get_image_data().get_data('L', mask.width)
+        image_data = image.get_image_data().get_data('RGBA', image.width * 4)
+        new_data = ""
+        for index, alpha in enumerate(mask_data):
+            alpha_ord = ord(alpha)
+            if alpha_ord > 0:
+                new_data += chr(color[0]) + \
+                            chr(color[1]) + \
+                            chr(color[2]) + \
+                            image_data[index*4+3]
+            else:
+                new_data += image_data[index*4] + \
+                            image_data[index*4+1] + \
+                            image_data[index*4+2] + \
+                            image_data[index*4+3]
+        image.get_image_data().set_data('RGBA', image.width * 4, new_data)
+        return pyglet.image.ImageData(image.width, image.height, "RGBA",
+                                      new_data, image.width * 4)
+
