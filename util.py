@@ -57,7 +57,7 @@ class ColoredSprite(pyglet.sprite.Sprite):
         return ((src * alpha) + (dst * (255 - alpha))) // 255
 
     def __generate_image(self, image, mask, color):
-        mask_data = mask.get_image_data().get_data('L', mask.width)
+        mask_data = mask.get_image_data().get_data('A', mask.width)
         image_data = image.get_image_data().get_data('RGBA', image.width * 4)
         new_data = ""
         for index, alpha in enumerate(mask_data):
