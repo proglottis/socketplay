@@ -10,6 +10,7 @@ Game client
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
 import logging
+import math
 
 import pyglet
 
@@ -27,6 +28,8 @@ class ClientBoxman(ColoredSprite):
                 pyglet.resource.image('boxman.png'),
                 pyglet.resource.image('boxman-color.png'), color,
                 batch=batch, group=group)
+        self.image.anchor_x = self.width // 2
+        self.image.anchor_y = self.height // 2
 
 class Client(pyglet.event.EventDispatcher):
     """Handle updating and rendering client entities and socket server"""
@@ -39,10 +42,10 @@ class Client(pyglet.event.EventDispatcher):
         self.clientcmd = clientcmd
         self.sendto = sendto
         self.players = players
-        self.north = False
-        self.east = False
-        self.south = False
-        self.west = False
+        self.forward = False
+        self.backward = False
+        self.rot_cw = False
+        self.rot_ccw = False
         self.changed = False
 
     def on_quit(self, address):
@@ -66,10 +69,11 @@ class Client(pyglet.event.EventDispatcher):
         else:
             logger.warning("Destroy:Unknown entity %d" % id)
 
-    def on_update_entity(self, id, pos, address):
+    def on_update_entity(self, id, pos, direction, address):
         if id not in self.players:
             return
         self.players[id].set_position(*pos)
+        self.players[id].rotation = math.degrees(direction)
 
     def send_hello(self):
         self.hellocmd.send(self.sendto)
@@ -79,23 +83,25 @@ class Client(pyglet.event.EventDispatcher):
 
     def send_client(self):
         if self.changed:
-            dir = (self.north, self.east, self.south, self.west)
+            dir = (self.forward, self.backward, self.rot_cw, self.rot_ccw)
             self.clientcmd.send(dir, self.sendto)
             self.changed = False
 
-    def start_move(self, north=False, east=False, south=False, west=False):
-        self.north = self.north or north
-        self.east = self.east or east
-        self.south = self.south or south
-        self.west = self.west or west
-        self.changed = north or east or south or west
+    def start_move(self, forward=False, backward=False,
+                   rot_cw=False, rot_ccw=False):
+        self.forward = self.forward or forward
+        self.backward = self.backward or backward
+        self.rot_cw = self.rot_cw or rot_cw
+        self.rot_ccw = self.rot_ccw or rot_ccw
+        self.changed = forward or backward or rot_cw or rot_ccw
 
-    def stop_move(self, north=False, east=False, south=False, west=False):
-        self.north = self.north and not north
-        self.east = self.east and not east
-        self.south = self.south and not south
-        self.west = self.west and not west
-        self.changed = north or east or south or west
+    def stop_move(self, forward=False, backward=False,
+                   rot_cw=False, rot_ccw=False):
+        self.forward = self.forward and not forward
+        self.backward = self.backward and not backward
+        self.rot_cw = self.rot_cw and not rot_cw
+        self.rot_ccw = self.rot_ccw and not rot_ccw
+        self.changed = forward or backward or rot_cw or rot_ccw
 
     def update(self, dt):
         self.send_client()

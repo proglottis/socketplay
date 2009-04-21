@@ -10,6 +10,7 @@ Game server
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
 import logging
+import math
 import random
 
 from protocol import command, dispatch
@@ -21,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 class ServerBoxman(object):
     """Server Boxman entity"""
-    SPEED = 100
+    SPEED = 100.0
+    ROT_SPEED = 1.0
     COLORS = (
         (0, 0, 255),
         (0, 255, 0),
@@ -29,18 +31,18 @@ class ServerBoxman(object):
         (255, 0, 0),
         (255, 0, 255),
         (255, 255, 0),
-        (255, 255, 255),
     )
 
     def __init__(self, id):
         self.id = id
         self.color = random.choice(self.COLORS)
-        self.x = 0
-        self.y = 0
-        self.north = False
-        self.east = False
-        self.south = False
-        self.west = False
+        self.forward = False
+        self.backward = False
+        self.rot_cw = False
+        self.rot_ccw = False
+        self.x = 0.0
+        self.y = 0.0
+        self.direction = 0.0
 
     def get_position(self):
         return (self.x, self.y)
@@ -49,19 +51,25 @@ class ServerBoxman(object):
         self.x = x
         self.y = y
 
-    def set_direction(self, direction):
-        self.north, self.east, self.south, self.west = direction
+    def get_direction(self):
+        return self.direction
+
+    def set_movement(self, movement):
+        self.forward, self.backward, self.rot_cw, self.rot_ccw = movement
 
     def update(self, dt):
         speed = self.SPEED * dt
-        if self.north:
-            self.y += speed
-        if self.south:
-            self.y -= speed
-        if self.west:
-            self.x -= speed
-        if self.east:
-            self.x += speed
+        rot = self.ROT_SPEED * dt
+        if self.rot_cw:
+            self.direction += rot
+        if self.rot_ccw:
+            self.direction -= rot
+        if self.forward:
+            self.x += math.cos(-self.direction) * speed
+            self.y += math.sin(-self.direction) * speed
+        if self.backward:
+            self.x -= math.cos(-self.direction) * speed
+            self.y -= math.sin(-self.direction) * speed
 
 class Server(object):
     """Handle updating entities and socket server"""
@@ -103,11 +111,11 @@ class Server(object):
         else:
             logger.debug("Quit:Client unknown")
 
-    def on_client(self, direction, address):
+    def on_client(self, movement, address):
         if address not in self.players:
             logger.debug("Client:Client unknown")
             return
-        self.players[address].set_direction(direction)
+        self.players[address].set_movement(movement)
 
     def update(self, dt):
         for player in self.players.itervalues():

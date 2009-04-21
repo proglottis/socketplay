@@ -75,7 +75,9 @@ class UpdateCommand(object):
             return
         data = struct.pack("!I", len(entities))
         for entity in entities:
-            data += struct.pack("!Bll", entity.id, *entity.get_position())
+            pos = entity.get_position()
+            data += struct.pack("!Bfff", entity.id, pos[0], pos[1],
+                                entity.get_direction())
         self.packer.pack(CMD_UPDATE, data, sendto)
 
 class ClientCommand(object):

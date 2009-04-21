@@ -104,14 +104,14 @@ class UpdateDispatch(pyglet.event.EventDispatcher):
         super(UpdateDispatch, self).__init__()
 
     def single(self, data, address):
-        id, posx, posy = struct.unpack("!Bll", data[:9])
+        id, posx, posy, direction = struct.unpack("!Bfff", data[:13])
         pos = (posx, posy)
-        self.dispatch_event('on_update_entity', id, pos, address)
+        self.dispatch_event('on_update_entity', id, pos, direction, address)
 
     def dispatch(self, data, address):
         count, = struct.unpack("!I", data[:4])
         for n in range(count):
-            self.single(data[4+9*n:], address)
+            self.single(data[4+13*n:], address)
 
 UpdateDispatch.register_event_type('on_update_entity')
 
@@ -122,7 +122,8 @@ class ClientDispatch(pyglet.event.EventDispatcher):
         self.players = players
 
     def dispatch(self, data, address):
-        north, east, south, west = struct.unpack("!????", data[:4])
-        self.dispatch_event('on_client', (north, east, south, west), address)
+        forward, backward, rot_cw, rot_ccw = struct.unpack("!????", data[:4])
+        self.dispatch_event('on_client', (forward, backward, rot_cw, rot_ccw),
+                            address)
 
 ClientDispatch.register_event_type('on_client')

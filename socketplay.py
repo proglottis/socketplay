@@ -29,25 +29,25 @@ class MainWindow(pyglet.window.Window):
 
     def on_key_press(self, symbol, modifiers):
         if symbol == pyglet.window.key.UP:
-            self.client.start_move(north=True)
-        elif symbol == pyglet.window.key.RIGHT:
-            self.client.start_move(east=True)
+            self.client.start_move(forward=True)
         elif symbol == pyglet.window.key.DOWN:
-            self.client.start_move(south=True)
+            self.client.start_move(backward=True)
         elif symbol == pyglet.window.key.LEFT:
-            self.client.start_move(west=True)
+            self.client.start_move(rot_ccw=True)
+        elif symbol == pyglet.window.key.RIGHT:
+            self.client.start_move(rot_cw=True)
         elif symbol == pyglet.window.key.ESCAPE:
             self.client.send_quit()
 
     def on_key_release(self, symbol, modifiers):
         if symbol == pyglet.window.key.UP:
-            self.client.stop_move(north=True)
-        elif symbol == pyglet.window.key.RIGHT:
-            self.client.stop_move(east=True)
+            self.client.stop_move(forward=True)
         elif symbol == pyglet.window.key.DOWN:
-            self.client.stop_move(south=True)
+            self.client.stop_move(backward=True)
         elif symbol == pyglet.window.key.LEFT:
-            self.client.stop_move(west=True)
+            self.client.stop_move(rot_ccw=True)
+        elif symbol == pyglet.window.key.RIGHT:
+            self.client.stop_move(rot_cw=True)
 
     def on_client_quit(self):
         self.close()
@@ -64,7 +64,7 @@ def start(server=True, address="localhost", port=11235):
     if server:
         logging.debug("Start server")
         server = create_server("0.0.0.0", port)
-        pyglet.clock.schedule_interval(server.update, 1/30.0)
+        pyglet.clock.schedule_interval(server.update, 1/20.0)
     logging.debug("Start client")
     client = create_client(address, port)
     client.send_hello()
