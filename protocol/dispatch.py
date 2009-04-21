@@ -104,14 +104,17 @@ class UpdateDispatch(pyglet.event.EventDispatcher):
         super(UpdateDispatch, self).__init__()
 
     def single(self, data, address):
-        id, posx, posy, direction = struct.unpack("!Bfff", data[:13])
+        (id, posx, posy, direction, velx, vely) = \
+                struct.unpack("!Bfffff", data[:21])
         pos = (posx, posy)
-        self.dispatch_event('on_update_entity', id, pos, direction, address)
+        vel = (velx, vely)
+        self.dispatch_event('on_update_entity', id, pos, direction, vel,
+                            address)
 
     def dispatch(self, data, address):
         count, = struct.unpack("!I", data[:4])
         for n in range(count):
-            self.single(data[4+13*n:], address)
+            self.single(data[4+21*n:], address)
 
 UpdateDispatch.register_event_type('on_update_entity')
 

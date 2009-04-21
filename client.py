@@ -30,6 +30,15 @@ class ClientBoxman(ColoredSprite):
                 batch=batch, group=group)
         self.image.anchor_x = self.width // 2
         self.image.anchor_y = self.height // 2
+        self.vel_x = 0.0
+        self.vel_y = 0.0
+
+    def set_velocity(self, x, y):
+        self.vel_x = x
+        self.vel_y = y
+
+    def update(self, dt):
+        self.set_position(self.x + self.vel_x * dt, self.y + self.vel_y * dt)
 
 class Client(pyglet.event.EventDispatcher):
     """Handle updating and rendering client entities and socket server"""
@@ -69,11 +78,12 @@ class Client(pyglet.event.EventDispatcher):
         else:
             logger.warning("Destroy:Unknown entity %d" % id)
 
-    def on_update_entity(self, id, pos, direction, address):
+    def on_update_entity(self, id, pos, direction, velocity, address):
         if id not in self.players:
             return
         self.players[id].set_position(*pos)
         self.players[id].rotation = math.degrees(direction)
+        self.players[id].set_velocity(*velocity)
 
     def send_hello(self):
         self.hellocmd.send(self.sendto)
@@ -106,6 +116,8 @@ class Client(pyglet.event.EventDispatcher):
     def update(self, dt):
         self.send_client()
         self.sock_server.update()
+        for player in self.players.itervalues():
+            player.update(dt)
 
     def draw(self):
         self.batch.draw()

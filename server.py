@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 class ServerBoxman(object):
     """Server Boxman entity"""
-    SPEED = 100.0
-    ROT_SPEED = 1.0
+    ACCELERATION = 100.0
+    ROT_SPEED = 2.5
     COLORS = (
         (0, 0, 255),
         (0, 255, 0),
@@ -40,6 +40,8 @@ class ServerBoxman(object):
         self.backward = False
         self.rot_cw = False
         self.rot_ccw = False
+        self.vel_x = 0.0
+        self.vel_y = 0.0
         self.x = 0.0
         self.y = 0.0
         self.direction = 0.0
@@ -51,6 +53,13 @@ class ServerBoxman(object):
         self.x = x
         self.y = y
 
+    def get_velocity(self):
+        return (self.vel_x, self.vel_y)
+
+    def set_velocity(self, x, y):
+        self.vel_x = x
+        self.vel_y = y
+
     def get_direction(self):
         return self.direction
 
@@ -58,18 +67,20 @@ class ServerBoxman(object):
         self.forward, self.backward, self.rot_cw, self.rot_ccw = movement
 
     def update(self, dt):
-        speed = self.SPEED * dt
+        accel = self.ACCELERATION * dt
         rot = self.ROT_SPEED * dt
         if self.rot_cw:
             self.direction += rot
         if self.rot_ccw:
             self.direction -= rot
         if self.forward:
-            self.x += math.cos(-self.direction) * speed
-            self.y += math.sin(-self.direction) * speed
+            self.vel_x += math.cos(-self.direction) * accel
+            self.vel_y += math.sin(-self.direction) * accel
         if self.backward:
-            self.x -= math.cos(-self.direction) * speed
-            self.y -= math.sin(-self.direction) * speed
+            self.vel_x -= math.cos(-self.direction) * accel
+            self.vel_y -= math.sin(-self.direction) * accel
+        self.x += self.vel_x * dt
+        self.y += self.vel_y * dt
 
 class Server(object):
     """Handle updating entities and socket server"""
