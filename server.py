@@ -81,6 +81,8 @@ class ServerBoxman(object):
             self.vel_y -= math.sin(-self.direction) * accel
         self.x += self.vel_x * dt
         self.y += self.vel_y * dt
+        self.x = self.x % 640.0
+        self.y = self.y % 480.0
 
 class Server(object):
     """Handle updating entities and socket server"""
