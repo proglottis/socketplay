@@ -50,7 +50,11 @@ class MainWindow(pyglet.window.Window):
             self.client.stop_move(rot_cw=True)
 
     def on_client_quit(self):
-        self.close()
+        pyglet.app.event_loop.exit()
+
+    def on_close(self):
+        self.client.send_quit()
+        return pyglet.event.EVENT_HANDLED
 
     def on_draw(self):
         self.clear()
