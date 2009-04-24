@@ -17,6 +17,8 @@ from protocol import command, dispatch
 from protocol.local import *
 from util import IdentAlloc
 import sockwrap
+import physics
+import vector
 
 logger = logging.getLogger(__name__)
 
@@ -40,28 +42,19 @@ class ServerBoxman(object):
         self.backward = False
         self.rot_cw = False
         self.rot_ccw = False
-        self.vel_x = 0.0
-        self.vel_y = 0.0
-        self.x = 0.0
-        self.y = 0.0
-        self.direction = 0.0
+        self.body = physics.Body()
 
     def get_position(self):
-        return (self.x, self.y)
-
-    def set_position(self, x, y):
-        self.x = x
-        self.y = y
+        return self.body.position
 
     def get_velocity(self):
-        return (self.vel_x, self.vel_y)
-
-    def set_velocity(self, x, y):
-        self.vel_x = x
-        self.vel_y = y
+        return self.body.velocity
 
     def get_direction(self):
-        return self.direction
+        return self.body.angle
+
+    def get_angle(self):
+        return self.body.angle
 
     def set_movement(self, movement):
         self.forward, self.backward, self.rot_cw, self.rot_ccw = movement
@@ -70,19 +63,20 @@ class ServerBoxman(object):
         accel = self.ACCELERATION * dt
         rot = self.ROT_SPEED * dt
         if self.rot_cw:
-            self.direction += rot
+            self.body.angular_velocity += rot
         if self.rot_ccw:
-            self.direction -= rot
+            self.body.angular_velocity -= rot
         if self.forward:
-            self.vel_x += math.cos(-self.direction) * accel
-            self.vel_y += math.sin(-self.direction) * accel
+            self.body.velocity = self.body.velocity + \
+                    vector.Vec2.from_angle(-self.get_angle(), accel)
         if self.backward:
-            self.vel_x -= math.cos(-self.direction) * accel
-            self.vel_y -= math.sin(-self.direction) * accel
-        self.x += self.vel_x * dt
-        self.y += self.vel_y * dt
-        self.x = self.x % 640.0
-        self.y = self.y % 480.0
+            self.body.velocity = self.body.velocity - \
+                    vector.Vec2.from_angle(-self.get_angle(), accel)
+        self.body.update_position(dt)
+        self.body.update_angle(dt)
+        self.body.position = vector.Vec2(self.body.position.x % 640.0,
+                                         self.body.position.y % 480.0)
+        self.body.angle %= 2.0 * math.pi
 
 class Server(object):
     """Handle updating entities and socket server"""
