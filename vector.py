@@ -16,13 +16,9 @@ class Vec2(object):
     VEC_X = 0
     VEC_Y = 1
 
-    def __init__(self, x, y):
+    def __init__(self, x=0.0, y=0.0):
         self.__x = x
         self.__y = y
-
-    @classmethod
-    def origin(cls):
-        return cls(0.0, 0.0)
 
     @classmethod
     def from_angle(cls, angle, magnitude=1.0):

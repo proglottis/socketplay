@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 class ServerBoxman(object):
     """Server Boxman entity"""
-    ACCELERATION = 100.0
-    ROT_SPEED = 2.5
+    THRUST = 500.0
+    ANGULAR_THRUST = 20.0
     COLORS = (
         (0, 0, 255),
         (0, 255, 0),
@@ -42,7 +42,7 @@ class ServerBoxman(object):
         self.backward = False
         self.rot_cw = False
         self.rot_ccw = False
-        self.body = physics.Body()
+        self.body = physics.Body(10.0, 10.0)
 
     def get_position(self):
         return self.body.position
@@ -60,20 +60,23 @@ class ServerBoxman(object):
         self.forward, self.backward, self.rot_cw, self.rot_ccw = movement
 
     def update(self, dt):
-        accel = self.ACCELERATION * dt
-        rot = self.ROT_SPEED * dt
+        force = vector.Vec2()
+        angular_force = 0.0
         if self.rot_cw:
-            self.body.angular_velocity += rot
+            angular_force += self.ANGULAR_THRUST
         if self.rot_ccw:
-            self.body.angular_velocity -= rot
+            angular_force -= self.ANGULAR_THRUST
         if self.forward:
-            self.body.velocity = self.body.velocity + \
-                    vector.Vec2.from_angle(-self.get_angle(), accel)
+            force = force + \
+                    vector.Vec2.from_angle(-self.get_angle(), self.THRUST)
         if self.backward:
-            self.body.velocity = self.body.velocity - \
-                    vector.Vec2.from_angle(-self.get_angle(), accel)
-        self.body.update_position(dt)
-        self.body.update_angle(dt)
+            force = force - \
+                    vector.Vec2.from_angle(-self.get_angle(), self.THRUST)
+        self.body.reset_force()
+        self.body.add_force(force)
+        self.body.reset_torque()
+        self.body.add_torque(angular_force)
+        self.body.update(dt)
         self.body.position = vector.Vec2(self.body.position.x % 640.0,
                                          self.body.position.y % 480.0)
         self.body.angle %= 2.0 * math.pi

@@ -27,19 +27,45 @@ class Space(object):
     def update(self, dt):
         """Update all bodies"""
         for body in self.bodies:
-            body.update_position(dt)
-            body.update_angle(dt)
+            body.update(dt)
 
 class Body(object):
     """A physical object"""
-    def __init__(self):
-        self.position = vector.Vec2.origin()
-        self.velocity = vector.Vec2.origin()
+    def __init__(self, mass, moment):
+        # Positional
+        self.mass = mass
+        self.position = vector.Vec2()
+        self.velocity = vector.Vec2()
+        self.force = vector.Vec2()
+        # Angular
+        self.moment = moment
         self.angle = 0.0
         self.angular_velocity = 0.0
+        self.torque = 0.0
 
-    def update_position(self, dt):
+    def reset_force(self):
+        self.force = vector.Vec2()
+
+    def add_force(self, force):
+        self.force = self.force + force
+
+    def reset_torque(self):
+        self.torque = 0.0
+
+    def add_torque(self, torque):
+        self.torque = self.torque + torque
+
+    def update_positional(self, dt):
+        acceleration = vector.Vec2(self.force.x / self.mass,
+                                   self.force.y / self.mass)
+        self.velocity = self.velocity + acceleration.scale(dt)
         self.position = self.position + self.velocity.scale(dt)
 
-    def update_angle(self, dt):
+    def update_angular(self, dt):
+        acceleration = self.torque / self.moment
+        self.angular_velocity = self.angular_velocity + acceleration * dt
         self.angle += self.angular_velocity * dt
+
+    def update(self, dt):
+        self.update_positional(dt)
+        self.update_angular(dt)
