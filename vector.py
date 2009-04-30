@@ -11,11 +11,10 @@ Vector maths
 
 import math
 
+(VEC_X, VEC_Y, VEC_Z) = range(3)
+
 class Vec2(object):
     """2-dimensional vector"""
-    VEC_X = 0
-    VEC_Y = 1
-
     def __init__(self, x=0.0, y=0.0):
         self.__x = x
         self.__y = y
@@ -52,19 +51,19 @@ class Vec2(object):
         return Vec2(new_x, new_y)
 
     def __add__(self, other):
-        new_x = self.x + other[self.VEC_X]
-        new_y = self.y + other[self.VEC_Y]
+        new_x = self.x + other[VEC_X]
+        new_y = self.y + other[VEC_Y]
         return Vec2(new_x, new_y)
 
     def __sub__(self, other):
-        new_x = self.x - other[self.VEC_X]
-        new_y = self.y - other[self.VEC_Y]
+        new_x = self.x - other[VEC_X]
+        new_y = self.y - other[VEC_Y]
         return Vec2(new_x, new_y)
 
     def __getitem__(self, name):
-        if name == self.VEC_X:
+        if name == VEC_X:
             return self.x
-        elif name == self.VEC_Y:
+        elif name == VEC_Y:
             return self.y
         raise IndexError('Vec2 index out of range')
 
