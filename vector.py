@@ -50,15 +50,25 @@ class Vec2(object):
         new_y = self.y * scalar
         return Vec2(new_x, new_y)
 
+    def dot(self, other):
+        """Vector multiplication as scalar
+        
+        Dot product of self by other"""
+        return self[VEC_X] * other[VEC_X] + self[VEC_Y] * other[VEC_Y]
+
     def __add__(self, other):
         new_x = self.x + other[VEC_X]
         new_y = self.y + other[VEC_Y]
         return Vec2(new_x, new_y)
 
+    __iadd__ = __add__
+
     def __sub__(self, other):
         new_x = self.x - other[VEC_X]
         new_y = self.y - other[VEC_Y]
         return Vec2(new_x, new_y)
+
+    __isub__ = __sub__
 
     def __getitem__(self, name):
         if name == VEC_X:

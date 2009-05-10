@@ -58,12 +58,12 @@ class Body(object):
     def update_positional(self, dt):
         acceleration = vector.Vec2(self.force.x / self.mass,
                                    self.force.y / self.mass)
-        self.velocity = self.velocity + acceleration.scale(dt)
-        self.position = self.position + self.velocity.scale(dt)
+        self.velocity += acceleration.scale(dt)
+        self.position += self.velocity.scale(dt)
 
     def update_angular(self, dt):
         acceleration = self.torque / self.moment
-        self.angular_velocity = self.angular_velocity + acceleration * dt
+        self.angular_velocity += acceleration * dt
         self.angle += self.angular_velocity * dt
 
     def update(self, dt):
